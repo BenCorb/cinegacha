@@ -15,9 +15,8 @@ from pathlib import Path
 
 
 ROOT = Path(__file__).resolve().parents[1]
-DATASETS_DIR = ROOT / "data" / "datasets"
-SOURCES_DIR = ROOT / "data" / "sources"
-DEFAULT_DATASET_ID = "cinegacha-films"
+DATASET_DIR = ROOT / "data" / "dataset"
+DEFAULT_DATASET_ID = "cinegacha"
 DROP_RATES = {"C": 55, "UC": 28, "R": 12, "UR": 4, "L": 1}
 RARITY_BUCKETS = (("L", 0.02), ("UR", 0.10), ("R", 0.30), ("UC", 0.60))
 
@@ -70,13 +69,7 @@ def unique_id(name: str, year: int | None, used: set[str]) -> str:
 
 
 def dataset_path(dataset_id: str) -> Path:
-    return DATASETS_DIR / dataset_id / "dataset.json"
-
-
-def source_path(dataset_id: str) -> Path:
-    if dataset_id == DEFAULT_DATASET_ID:
-        return SOURCES_DIR / "films.json"
-    return SOURCES_DIR / f"{dataset_id}.json"
+    return DATASET_DIR / "dataset.json"
 
 
 def read_dataset(path: Path) -> dict:
@@ -91,11 +84,6 @@ def read_dataset(path: Path) -> dict:
 def write_dataset(path: Path, dataset: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(json.dumps(dataset, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
-
-
-def write_source(path: Path, films: list[dict]) -> None:
-    path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(json.dumps(films, ensure_ascii=True, indent=2) + "\n", encoding="utf-8")
 
 
 def prompt(text: str, default: str | None = None) -> str:
@@ -127,9 +115,10 @@ def prompt_int(text: str, default: int, minimum: int = 0, maximum: int | None = 
 
 
 def list_dataset_ids() -> list[str]:
-    if not DATASETS_DIR.exists():
+    if not (DATASET_DIR / "dataset.json").exists():
         return []
-    return sorted(p.name for p in DATASETS_DIR.iterdir() if (p / "dataset.json").exists())
+    dataset = read_dataset(DATASET_DIR / "dataset.json")
+    return [dataset.get("id") or DEFAULT_DATASET_ID]
 
 
 def select_or_create_dataset() -> tuple[Path, dict, bool]:
@@ -141,7 +130,7 @@ def select_or_create_dataset() -> tuple[Path, dict, bool]:
 
     choice = prompt_int("Choix", 1 if ids else 1, 1, len(ids) + 1)
     if choice <= len(ids):
-        path = dataset_path(ids[choice - 1])
+        path = DATASET_DIR / "dataset.json"
         return path, read_dataset(path), False
 
     dataset_id = slugify(prompt("Identifiant de la database", DEFAULT_DATASET_ID))
@@ -498,7 +487,6 @@ def cache_missing_posters(dataset_path_: Path, dataset: dict, limit: int = 0, de
         print("TMDB_API_KEY ou TMDB_READ_TOKEN manquant. Posters ignores.")
         return 0
 
-    dataset_id = dataset["id"]
     image_dir = dataset_path_.parent / "images"
     image_dir.mkdir(parents=True, exist_ok=True)
 
@@ -509,12 +497,12 @@ def cache_missing_posters(dataset_path_: Path, dataset: dict, limit: int = 0, de
 
         file_path = image_dir / f"{item['id']}.jpg"
         if file_path.exists():
-            item["image"] = f"/datasets/{dataset_id}/images/{file_path.name}"
+            item["image"] = f"/dataset/images/{file_path.name}"
             item.setdefault("posterSource", "local-cache")
             print(f"{index:03d}/{len(dataset['items'])} {item['name']} -> deja cache")
             continue
 
-        if item.get("image", "").startswith(f"/datasets/{dataset_id}/images/"):
+        if item.get("image", "").startswith("/dataset/images/"):
             print(f"{index:03d}/{len(dataset['items'])} {item['name']} -> deja reference")
             continue
 
@@ -525,7 +513,7 @@ def cache_missing_posters(dataset_path_: Path, dataset: dict, limit: int = 0, de
 
         poster_url = TMDB_IMAGE_BASE + movie["poster_path"]
         file_path.write_bytes(download(poster_url, {"User-Agent": "CineGacha/1.0"}))
-        item["image"] = f"/datasets/{dataset_id}/images/{file_path.name}"
+        item["image"] = f"/dataset/images/{file_path.name}"
         item["posterSource"] = "TMDb"
         item["posterTmdbId"] = movie["id"]
         updated += 1
@@ -566,7 +554,6 @@ def run_interactive() -> None:
         print("Raretes recalculees.")
 
     write_dataset(path, dataset)
-    write_source(source_path(dataset["id"]), dataset_to_source_films(dataset))
     print(f"Database ecrite: {path}")
 
     if actions["posters"]:

@@ -4,4 +4,4 @@ __pycache__/
 .claude/
 data/gachapon.sqlite*
 data/sources/
-data/datasets/*/images/
+data/dataset/images/

@@ -25,10 +25,9 @@ HOST=127.0.0.1 python3 server.py
 docker compose up --build
 ```
 
-## Dataset modulaire
+## Dataset
 
-Le dataset actif vit dans `data/datasets/cinegacha-films/dataset.json`.
-La source brute importee vit dans `data/sources/films.json`.
+Le dataset actif vit dans `data/dataset/dataset.json`.
 
 Pour creer ou editer une database de films :
 

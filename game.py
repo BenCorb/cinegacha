@@ -21,7 +21,7 @@ from pathlib import Path
 ROOT = Path(__file__).parent.resolve()
 STATIC_DIR = ROOT / "static"
 DATA_DIR = ROOT / "data"
-DATASET_DIR = DATA_DIR / "datasets" / os.environ.get("GACHA_DATASET", "cinegacha-films")
+DATASET_DIR = DATA_DIR / os.environ.get("GACHA_DATASET_DIR", "dataset")
 DATASET_PATH = DATASET_DIR / "dataset.json"
 DB_PATH = Path(os.environ.get("GACHA_DB", DATA_DIR / "gachapon.sqlite"))
 

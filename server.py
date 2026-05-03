@@ -97,8 +97,8 @@ class Handler(SimpleHTTPRequestHandler):
     def translate_path(self, path: str) -> str:
         parsed = urlparse(path)
         clean_path = unquote(parsed.path)
-        if clean_path.startswith("/datasets/"):
-            return str(DATA_DIR / "datasets" / clean_path.removeprefix("/datasets/"))
+        if clean_path.startswith("/dataset/"):
+            return str(DATA_DIR / "dataset" / clean_path.removeprefix("/dataset/"))
         if clean_path == "/":
             return str(STATIC_DIR / "index.html")
         candidate = STATIC_DIR / clean_path.removeprefix("/")
