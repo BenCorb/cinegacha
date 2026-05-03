@@ -404,10 +404,9 @@ export function creditsPanelHtml() {
                 <strong>v1.1</strong>
                 <ul>
                   <li>Compteur de résultats et bouton reset dans les filtres de collection</li>
-                  <li>État vide différencié (collection vierge vs. aucun résultat)</li>
+                  <li>Optimisation de l'affichage de la collection</li>
                   <li>Autocomplete des pseudos dans l'envoi de cartes</li>
-                  <li>Classement chargé à la demande (tab Classement)</li>
-                  <li>Code réorganisé en modules (game / db / server, state / components / app)</li>
+                  <li>Optimisation de la charge serveur</li>
                 </ul>
               </div>
               <div class="changelog-entry">
