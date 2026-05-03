@@ -12,7 +12,7 @@ export function poster(item) {
   if (!item.owned) return `<div class="placeholder">?</div>`;
   return `
     <button class="poster poster-button" type="button" data-poster-menu="${item.id}" aria-label="Actions pour ${escapeHtml(item.name)}">
-      <img src="${item.image}" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async">
+      <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async">
     </button>
   `;
 }
@@ -21,7 +21,7 @@ export function readonlyPoster(item) {
   if (!item.owned) return `<div class="placeholder">?</div>`;
   return `
     <div class="poster">
-      <img src="${item.image}" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async">
+      <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async">
     </div>
   `;
 }

@@ -25,6 +25,12 @@ HOST=127.0.0.1 python3 server.py
 docker compose up --build
 ```
 
+## Données utilisateur
+
+La base utilisateurs vit dans `data/gachapon.sqlite`.
+Le serveur cree automatiquement un backup toutes les heures dans `data/backups/`,
+45 minutes apres l'heure pleine, et conserve les 24 derniers backups.
+
 ## Dataset
 
 Le dataset actif vit dans `data/dataset/dataset.json`.

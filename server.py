@@ -49,6 +49,7 @@ from db import (
     init_db,
     normalize_username,
     require_user,
+    start_database_backups,
 )
 
 
@@ -459,6 +460,7 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     init_db()
+    start_database_backups()
     port = int(os.environ.get("PORT", "8000"))
     host = os.environ.get("HOST", "0.0.0.0")
     print(f"CinéGacha écoute sur {host}:{port}")

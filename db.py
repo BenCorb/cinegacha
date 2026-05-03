@@ -8,8 +8,11 @@ from __future__ import annotations
 import hashlib
 import hmac
 import sqlite3
+import threading
+import time
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler
+from pathlib import Path
 
 from game import (
     ApiError,
@@ -19,6 +22,11 @@ from game import (
     now,
     refill_user,
 )
+
+BACKUP_DIR = DATA_DIR / "backups"
+BACKUP_KEEP = 24
+BACKUP_INTERVAL_SECONDS = 60 * 60
+BACKUP_OFFSET_SECONDS = 45 * 60
 
 
 # ---------------------------------------------------------------------------
@@ -115,6 +123,58 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE collection_state ADD COLUMN watchlist INTEGER NOT NULL DEFAULT 0"
             )
+
+
+# ---------------------------------------------------------------------------
+# Backups
+# ---------------------------------------------------------------------------
+
+def backup_database() -> Path:
+    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
+    stamp = time.strftime("%Y%m%d-%H")
+    backup_path = BACKUP_DIR / f"gachapon-{stamp}.sqlite"
+    tmp_path = backup_path.with_suffix(".sqlite.tmp")
+
+    with sqlite3.connect(DB_PATH) as source, sqlite3.connect(tmp_path) as target:
+        source.backup(target)
+    tmp_path.replace(backup_path)
+    prune_database_backups()
+    return backup_path
+
+
+def prune_database_backups(keep: int = BACKUP_KEEP) -> None:
+    backups = sorted(BACKUP_DIR.glob("gachapon-*.sqlite"), key=lambda path: path.name)
+    for backup in backups[:-keep]:
+        backup.unlink(missing_ok=True)
+
+
+def seconds_until_next_backup() -> int:
+    now_seconds = int(time.time())
+    elapsed_this_hour = now_seconds % BACKUP_INTERVAL_SECONDS
+    delay = BACKUP_OFFSET_SECONDS - elapsed_this_hour
+    if delay <= 0:
+        delay += BACKUP_INTERVAL_SECONDS
+    return delay
+
+
+def backup_loop() -> None:
+    while True:
+        time.sleep(seconds_until_next_backup())
+        try:
+            backup_path = backup_database()
+            print(f"Backup SQLite cree: {backup_path}")
+        except Exception as exc:
+            print(f"Backup SQLite impossible: {exc}")
+
+
+def start_database_backups() -> None:
+    try:
+        backup_path = backup_database()
+        print(f"Backup SQLite cree: {backup_path}")
+    except Exception as exc:
+        print(f"Backup SQLite impossible: {exc}")
+    thread = threading.Thread(target=backup_loop, name="sqlite-backups", daemon=True)
+    thread.start()
 
 
 # ---------------------------------------------------------------------------
