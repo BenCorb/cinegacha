@@ -395,7 +395,30 @@ export function creditsPanelHtml() {
         <span class="credits-stamp">CinéGacha</span>
       </div>
       <div class="credit-list">
-        <div class="credit-row"><span>Version</span><strong>${APP_VERSION}</strong></div>
+        <div class="credit-row">
+          <span>Version</span>
+          <details class="changelog">
+            <summary>${APP_VERSION}</summary>
+            <div class="changelog-body">
+              <div class="changelog-entry">
+                <strong>v1.1</strong>
+                <ul>
+                  <li>Compteur de résultats et bouton reset dans les filtres de collection</li>
+                  <li>État vide différencié (collection vierge vs. aucun résultat)</li>
+                  <li>Autocomplete des pseudos dans l'envoi de cartes</li>
+                  <li>Classement chargé à la demande (tab Classement)</li>
+                  <li>Code réorganisé en modules (game / db / server, state / components / app)</li>
+                </ul>
+              </div>
+              <div class="changelog-entry">
+                <strong>v1.0</strong>
+                <ul>
+                  <li>Version initiale</li>
+                </ul>
+              </div>
+            </div>
+          </details>
+        </div>
         <div class="credit-row"><span>Développement</span><strong>Benjamin Corbelet-Riou</strong></div>
         <div class="credit-row">
           <span>Posters</span>

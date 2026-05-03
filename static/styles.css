@@ -1231,6 +1231,67 @@ input, select {
   line-height: 1.45;
 }
 
+.changelog {
+  position: relative;
+}
+
+.changelog summary {
+  font-weight: 800;
+  cursor: pointer;
+  list-style: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.changelog summary::after {
+  content: "▾";
+  font-size: .75em;
+  opacity: .55;
+  transition: transform .15s ease;
+}
+
+.changelog[open] summary::after {
+  transform: rotate(-180deg);
+}
+
+.changelog-body {
+  position: absolute;
+  right: 0;
+  top: calc(100% + 6px);
+  z-index: 200;
+  background: white;
+  border: 2px solid #263249;
+  border-radius: 10px;
+  box-shadow: 0 6px 0 #263249;
+  padding: 14px 16px;
+  width: 280px;
+  display: grid;
+  gap: 12px;
+}
+
+.changelog-entry strong {
+  display: block;
+  font-size: .82rem;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  color: var(--muted);
+  margin-bottom: 5px;
+}
+
+.changelog-entry ul {
+  margin: 0;
+  padding-left: 1.1em;
+  display: grid;
+  gap: 3px;
+}
+
+.changelog-entry li {
+  font-size: .86rem;
+  line-height: 1.4;
+  color: var(--ink);
+}
+
 
 /* ===== Classement ===== */
 

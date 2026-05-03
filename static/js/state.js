@@ -31,7 +31,7 @@ export const state = {
 // ---------------------------------------------------------------------------
 
 export const ROLL_COST   = 100;
-export const APP_VERSION = "1.0";
+export const APP_VERSION = "1.1";
 export const SELL_PRICES = { C: 20, UC: 30, R: 50, UR: 100, L: 150 };
 export const RARITIES    = ["C", "UC", "R", "UR", "L"];
 export const RARITY_RANK = { L: 0, UR: 1, R: 2, UC: 3, C: 4 };
