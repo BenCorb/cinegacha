@@ -2,6 +2,8 @@
 
 Jeu navigateur auto-hebergeable : machine gachapon, capsules, collection de films et envoi de doublons entre utilisateurs.
 
+Version en ligne : https://cinegacha.app
+
 ## Lancer en local
 
 ```bash
@@ -28,31 +30,20 @@ docker compose up --build
 Le dataset actif vit dans `data/datasets/cinegacha-films/dataset.json`.
 La source brute importee vit dans `data/sources/films.json`.
 
-Pour reconstruire le dataset actif depuis la source JSON :
+Pour creer ou editer une database de films :
 
 ```bash
-python3 scripts/import_films_json.py
+python3 scripts/manage_database.py
 ```
 
-Pour importer un CSV :
+Le script permet de choisir les actions a realiser : editer une database existante,
+creer une nouvelle database, importer depuis une liste Letterboxd, supprimer les
+doublons, recalculer la rarete des cartes et importer les posters manquants.
+Pour les posters, creer une cle TMDb puis lancer le script avec une des variables :
 
 ```bash
-python3 scripts/import_dataset.py films.csv mon-dataset "Mon Dataset"
-GACHA_DATASET=mon-dataset python3 server.py
-```
-
-Colonnes CSV attendues : `name,image,rating,reviewCount,director`.
-
-Source recommandee pour de vrais posters : TMDb. Creer une cle sur TMDb, puis :
-
-```bash
-TMDB_API_KEY=ta_cle python3 scripts/enrich_posters_tmdb.py data/datasets/cinegacha-films/dataset.json
-```
-
-Ou avec un token v4 :
-
-```bash
-TMDB_READ_TOKEN=ton_token python3 scripts/enrich_posters_tmdb.py data/datasets/cinegacha-films/dataset.json
+TMDB_API_KEY=ta_cle python3 scripts/manage_database.py
+TMDB_READ_TOKEN=ton_token python3 scripts/manage_database.py
 ```
 
 ## Notes v1
