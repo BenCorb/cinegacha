@@ -1,0 +1,20 @@
+{
+  "version": "1.1",
+  "changelog": [
+    {
+      "version": "1.1",
+      "changes": [
+        "Compteur de résultats et bouton reset dans les filtres de collection",
+        "Optimisation de l'affichage de la collection",
+        "Autocomplete des pseudos dans l'envoi de cartes",
+        "Optimisation de la charge serveur"
+      ]
+    },
+    {
+      "version": "1.0",
+      "changes": [
+        "Version initiale"
+      ]
+    }
+  ]
+}

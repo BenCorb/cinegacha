@@ -24,6 +24,10 @@ export const state = {
   message: "",
   filters: { q: "", rarity: "all", owned: "all" },
   publicFilters: { q: "", rarity: "all", owned: "all" },
+  release: {
+    version: "dev",
+    changelog: [],
+  },
 };
 
 // ---------------------------------------------------------------------------
@@ -31,7 +35,6 @@ export const state = {
 // ---------------------------------------------------------------------------
 
 export const ROLL_COST   = 100;
-export const APP_VERSION = "1.1";
 export const SELL_PRICES = { C: 20, UC: 30, R: 50, UR: 100, L: 150 };
 export const RARITIES    = ["C", "UC", "R", "UR", "L"];
 export const RARITY_RANK = { L: 0, UR: 1, R: 2, UC: 3, C: 4 };
@@ -128,6 +131,20 @@ export async function api(path, options = {}) {
     throw error;
   }
   return data;
+}
+
+export async function loadRelease() {
+  try {
+    const response = await fetch("/version.json", { cache: "no-store" });
+    if (!response.ok) return;
+    const release = await response.json();
+    state.release = {
+      version: release.version || "dev",
+      changelog: Array.isArray(release.changelog) ? release.changelog : [],
+    };
+  } catch {
+    state.release = { version: "dev", changelog: [] };
+  }
 }
 
 export function saveUser(user) {

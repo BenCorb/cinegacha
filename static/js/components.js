@@ -1,6 +1,6 @@
 import {
   state,
-  APP_VERSION, RARITIES, RARITY_RANK, SELL_PRICES,
+  RARITIES, RARITY_RANK, SELL_PRICES,
   creditTimerText, escapeHtml, formatCredits, statsHtml,
 } from "./state.js";
 
@@ -385,6 +385,18 @@ export function accountPanelHtml() {
 }
 
 export function creditsPanelHtml() {
+  const changelog = state.release.changelog || [];
+  const changelogHtml = changelog.map((entry) => {
+    const changes = Array.isArray(entry.changes) ? entry.changes : [];
+    return `
+      <div class="changelog-entry">
+        <strong>v${escapeHtml(entry.version || "")}</strong>
+        <ul>
+          ${changes.map((change) => `<li>${escapeHtml(change)}</li>`).join("")}
+        </ul>
+      </div>
+    `;
+  }).join("");
   return `
     <section class="panel credits-panel" aria-labelledby="creditsTitle">
       <div class="credits-header">
@@ -398,23 +410,9 @@ export function creditsPanelHtml() {
         <div class="credit-row">
           <span>Version</span>
           <details class="changelog">
-            <summary>${APP_VERSION}</summary>
+            <summary>${escapeHtml(state.release.version || "dev")}</summary>
             <div class="changelog-body">
-              <div class="changelog-entry">
-                <strong>v1.1</strong>
-                <ul>
-                  <li>Compteur de résultats et bouton reset dans les filtres de collection</li>
-                  <li>Optimisation de l'affichage de la collection</li>
-                  <li>Autocomplete des pseudos dans l'envoi de cartes</li>
-                  <li>Optimisation de la charge serveur</li>
-                </ul>
-              </div>
-              <div class="changelog-entry">
-                <strong>v1.0</strong>
-                <ul>
-                  <li>Version initiale</li>
-                </ul>
-              </div>
+              ${changelogHtml || `<div class="changelog-entry"><strong>Aucune note</strong></div>`}
             </div>
           </details>
         </div>

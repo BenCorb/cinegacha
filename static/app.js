@@ -2,7 +2,7 @@ import {
   state,
   RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
-  creditTimerText, escapeHtml, serverNowMs,
+  creditTimerText, escapeHtml, loadRelease, serverNowMs,
 } from "./js/state.js";
 import {
   accountPanelHtml, applyCollectionFilters, burstHtml,
@@ -776,4 +776,4 @@ document.addEventListener("click", (event) => {
   setPosterMenu("", false);
 });
 
-refresh();
+loadRelease().finally(() => refresh());

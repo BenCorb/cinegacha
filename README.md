@@ -45,9 +45,7 @@ TMDB_API_KEY=ta_cle python3 scripts/manage_database.py
 TMDB_READ_TOKEN=ton_token python3 scripts/manage_database.py
 ```
 
-## Notes v1
+## Version et changelog
 
-- Les comptes utilisent `username + cle de connexion`.
-- La cle est affichee a la creation et stockee dans le navigateur courant.
-- Les envois de cartes exigent un doublon cote expediteur.
-- Les posters sont caches localement dans le dossier du dataset actif.
+La version affichee dans l'app et le changelog vivent dans `static/version.json`.
+Modifier ce fichier suffit pour publier une nouvelle note de version.
