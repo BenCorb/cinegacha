@@ -1,0 +1,13 @@
+.DS_Store
+**/.DS_Store
+
+data/*.sqlite
+data/*.sqlite-wal
+data/*.sqlite-shm
+data/sources/
+
+release/
+scripts/
+
+.env
+.env.*
