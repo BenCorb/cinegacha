@@ -422,6 +422,10 @@ export function creditsPanelHtml() {
           <strong><a href="https://github.com/BenCorb/cinegacha" target="_blank" rel="noreferrer">GitHub</a></strong>
         </div>
         <div class="credit-row">
+          <span>Licence</span>
+          <strong><a href="https://github.com/BenCorb/cinegacha/blob/main/LICENSE" target="_blank" rel="noreferrer">GNU GPL v3+</a></strong>
+        </div>
+        <div class="credit-row">
           <span>Posters</span>
           <strong><a href="https://www.themoviedb.org" target="_blank" rel="noreferrer">TMDB</a>, cache local</strong>
         </div>
