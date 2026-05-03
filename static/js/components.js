@@ -418,6 +418,10 @@ export function creditsPanelHtml() {
         </div>
         <div class="credit-row"><span>Développement</span><strong>Benjamin Corbelet-Riou</strong></div>
         <div class="credit-row">
+          <span>Code source</span>
+          <strong><a href="https://github.com/BenCorb/cinegacha" target="_blank" rel="noreferrer">GitHub</a></strong>
+        </div>
+        <div class="credit-row">
           <span>Posters</span>
           <strong><a href="https://www.themoviedb.org" target="_blank" rel="noreferrer">TMDB</a>, cache local</strong>
         </div>

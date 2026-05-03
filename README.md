@@ -55,3 +55,8 @@ TMDB_READ_TOKEN=ton_token python3 scripts/manage_database.py
 
 La version affichee dans l'app et le changelog vivent dans `static/version.json`.
 Modifier ce fichier suffit pour publier une nouvelle note de version.
+
+## Licence
+
+CinéGacha est distribue sous licence GNU GPL v3 ou ulterieure.
+Voir `LICENSE` pour le texte complet.
