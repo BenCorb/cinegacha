@@ -1212,18 +1212,26 @@ input, select {
 }
 
 .credit-row a,
-.legal-notes a {
+.legal-notes a,
+.privacy-notice a {
   color: inherit;
 }
 
-.legal-notes {
+.legal-notes,
+.privacy-notice {
   display: grid;
   gap: 8px;
   border-top: 2px dashed rgba(38, 50, 73, .18);
   padding-top: 14px;
 }
 
-.legal-notes p {
+.privacy-notice h3 {
+  margin: 0 0 2px;
+  font-size: 1rem;
+}
+
+.legal-notes p,
+.privacy-notice p {
   margin: 0;
   color: #56647d;
   font-size: .88rem;

@@ -435,9 +435,14 @@ export function creditsPanelHtml() {
         </div>
       </div>
       <div class="legal-notes">
-        <p>This product uses the TMDB API but is not endorsed or certified by TMDB.</p>
-        <p>CinéGacha est un projet personnel non commercial, non affilié à Letterboxd, TMDB, ni aux ayants droit des films. Les titres, images, marques et données liées aux films appartiennent à leurs propriétaires respectifs.</p>
-        <p>Les données de jeu de cette instance sont stockées localement dans la base SQLite du serveur : pseudo, clé hashée, collection, crédits, favoris, watchlist et films vus.</p>
+        <p>This application uses TMDB and the TMDB APIs but is not endorsed, certified, or otherwise approved by TMDB.</p>
+        <p>CinéGacha est un projet personnel non commercial, non affilié à Letterboxd, TMDB, ni aux ayants droit des films. Les titres, images, marques, notes, liens, métadonnées et données liées aux films appartiennent à leurs propriétaires respectifs.</p>
+      </div>
+      <div class="privacy-notice">
+        <h3>Confidentialité</h3>
+        <p>CinéGacha enregistre uniquement les données nécessaires au jeu : pseudo, clé de connexion hashée, collection, crédits, échanges, favoris, watchlist et films vus.</p>
+        <p>Ces données sont stockées dans la base SQLite du serveur. Elles servent à retrouver ton compte, afficher ta progression, gérer les échanges et maintenir le classement.</p>
+        <p>Pour toute question, demande d'accès ou suppression de compte, contacte <a href="mailto:cinegacha.app@pm.me">cinegacha.app@pm.me</a>.</p>
       </div>
     </section>
   `;
