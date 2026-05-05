@@ -60,11 +60,10 @@ Format JSON attendu :
 ]
 ```
 
-Pour les posters, creer une cle TMDb puis lancer le script avec une des variables :
+Pour les posters, creer une cle TMDb puis lancer le script avec la variable :
 
 ```bash
 TMDB_API_KEY=ta_cle python3 scripts/manage_database.py
-TMDB_READ_TOKEN=ton_token python3 scripts/manage_database.py
 ```
 
 ## Version et changelog

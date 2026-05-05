@@ -264,14 +264,7 @@ def movie_year(movie: dict) -> int | None:
         return None
 
 
-def tmdb_headers(token: str | None) -> dict[str, str]:
-    headers = {"User-Agent": "CineGacha/1.0"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
-    return headers
-
-
-def search_tmdb_movie(name: str, year: int | None, api_key: str | None, token: str | None) -> dict | None:
+def search_tmdb_movie(name: str, year: int | None, api_key: str) -> dict | None:
     queries = [name]
     if ":" in name:
         queries.append(name.split(":", 1)[0])
@@ -292,7 +285,7 @@ def search_tmdb_movie(name: str, year: int | None, api_key: str | None, token: s
         if api_key:
             params["api_key"] = api_key
         url = TMDB_SEARCH_API + "?" + urllib.parse.urlencode(params)
-        data = request_json(url, tmdb_headers(token), timeout=20)
+        data = request_json(url, {"User-Agent": "CineGacha/1.0"}, timeout=20)
         results = [item for item in data.get("results", []) if item.get("poster_path")]
         if not results:
             continue
@@ -311,9 +304,8 @@ def search_tmdb_movie(name: str, year: int | None, api_key: str | None, token: s
 
 def cache_missing_posters(dataset_path_: Path, dataset: dict, limit: int = 0, delay: float = 0.25) -> int:
     api_key = os.environ.get("TMDB_API_KEY")
-    token = os.environ.get("TMDB_READ_TOKEN")
-    if not api_key and not token:
-        print("TMDB_API_KEY ou TMDB_READ_TOKEN manquant. Posters ignores.")
+    if not api_key:
+        print("TMDB_API_KEY manquant. Posters ignores.")
         return 0
 
     image_dir = dataset_path_.parent / "images"
@@ -335,7 +327,7 @@ def cache_missing_posters(dataset_path_: Path, dataset: dict, limit: int = 0, de
             print(f"{index:03d}/{len(dataset['items'])} {item['name']} -> deja reference")
             continue
 
-        movie = search_tmdb_movie(item["name"], item.get("year"), api_key, token)
+        movie = search_tmdb_movie(item["name"], item.get("year"), api_key)
         if not movie:
             print(f"{index:03d}/{len(dataset['items'])} {item['name']} -> sans poster")
             continue
