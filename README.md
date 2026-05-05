@@ -1,6 +1,6 @@
 # CinéGacha
 
-Jeu navigateur auto-hebergeable : machine gachapon, capsules, collection de films et envoi de doublons entre utilisateurs.
+Jeu navigateur : machine gachapon, capsules, collection de films et envoi de doublons entre utilisateurs.
 
 Version en ligne : https://cinegacha.app
 
@@ -44,12 +44,6 @@ explicite et cree un backup SQLite avant suppression. Pour un usage automatise :
 python3 scripts/delete_user_data.py pseudo --yes
 ```
 
-## Contact et confidentialite
-
-L'app affiche une notice de confidentialite dans la section `Credits & mentions`.
-Pour toute question, demande d'acces ou suppression de compte, le contact est :
-`cinegacha.app@pm.me`.
-
 ## Dataset
 
 Le dataset actif vit dans `data/dataset/dataset.json`.
@@ -85,18 +79,7 @@ Pour les posters, creer une cle TMDb puis lancer le script avec la variable :
 TMDB_API_KEY=ta_cle python3 scripts/manage_database.py
 ```
 
-Les posters et metadonnees importes depuis des services tiers ne sont pas couverts
-par la licence GPL du code. Avant toute publication d'une instance ou d'un dataset,
-verifier et respecter les conditions de TMDb, Letterboxd et des ayants droit
-concernes, notamment les exigences d'attribution, de non-approbation, de duree de
-cache et d'usage non commercial.
-
 ## Version et changelog
 
 La version affichee dans l'app et le changelog vivent dans `static/version.json`.
 Modifier ce fichier suffit pour publier une nouvelle note de version.
-
-## Licence
-
-CinéGacha est distribue sous licence GNU GPL v3 ou ulterieure.
-Voir `LICENSE` pour le texte complet.
