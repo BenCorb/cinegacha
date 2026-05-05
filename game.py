@@ -140,17 +140,21 @@ def inventory_count(conn: sqlite3.Connection, user_id: int, item_id: str) -> int
 
 
 def add_item(conn: sqlite3.Connection, user_id: int, item_id: str, delta: int) -> None:
-    current = inventory_count(conn, user_id, item_id)
-    next_count = current + delta
-    if next_count < 0:
-        raise ApiError(HTTPStatus.CONFLICT, "Inventaire insuffisant.")
-    conn.execute(
-        """
-        INSERT INTO inventory (user_id, item_id, count) VALUES (?, ?, ?)
-        ON CONFLICT(user_id, item_id) DO UPDATE SET count = excluded.count
-        """,
-        (user_id, item_id, next_count),
-    )
+    if delta > 0:
+        conn.execute(
+            """
+            INSERT INTO inventory (user_id, item_id, count) VALUES (?, ?, ?)
+            ON CONFLICT(user_id, item_id) DO UPDATE SET count = count + excluded.count
+            """,
+            (user_id, item_id, delta),
+        )
+    else:
+        rows = conn.execute(
+            "UPDATE inventory SET count = count + ? WHERE user_id = ? AND item_id = ? AND count + ? >= 0",
+            (delta, user_id, item_id, delta),
+        ).rowcount
+        if rows == 0:
+            raise ApiError(HTTPStatus.CONFLICT, "Inventaire insuffisant.")
 
 
 def user_credits(conn: sqlite3.Connection, user_id: int) -> int:
