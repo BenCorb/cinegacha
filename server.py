@@ -57,10 +57,15 @@ from db import (
 # Utilitaires HTTP
 # ---------------------------------------------------------------------------
 
+MAX_BODY = 64 * 1024
+
+
 def read_json_body(handler: SimpleHTTPRequestHandler) -> dict:
     length = int(handler.headers.get("Content-Length", "0"))
     if length == 0:
         return {}
+    if length > MAX_BODY:
+        raise ApiError(HTTPStatus.REQUEST_ENTITY_TOO_LARGE, "Corps trop volumineux.")
     try:
         return json.loads(handler.rfile.read(length).decode("utf-8"))
     except json.JSONDecodeError:
@@ -99,16 +104,24 @@ class Handler(SimpleHTTPRequestHandler):
         parsed = urlparse(path)
         clean_path = unquote(parsed.path)
         if clean_path.startswith("/dataset/"):
-            return str(DATA_DIR / "dataset" / clean_path.removeprefix("/dataset/"))
+            dataset_root = (DATA_DIR / "dataset").resolve()
+            candidate = (DATA_DIR / "dataset" / clean_path.removeprefix("/dataset/")).resolve()
+            if candidate.is_relative_to(dataset_root):
+                return str(candidate)
+            return str(STATIC_DIR / "index.html")
         if clean_path == "/":
             return str(STATIC_DIR / "index.html")
-        candidate = STATIC_DIR / clean_path.removeprefix("/")
-        if candidate.exists():
+        static_root = STATIC_DIR.resolve()
+        candidate = (STATIC_DIR / clean_path.removeprefix("/")).resolve()
+        if candidate.is_relative_to(static_root) and candidate.exists():
             return str(candidate)
         return str(STATIC_DIR / "index.html")
 
     def end_headers(self) -> None:
-        self.send_header("Cache-Control", "no-store")
+        if self.path.startswith("/api/"):
+            self.send_header("Cache-Control", "no-store")
+        else:
+            self.send_header("Cache-Control", "public, max-age=3600")
         super().end_headers()
 
     def send_json(self, payload: dict, status: HTTPStatus = HTTPStatus.OK) -> None:

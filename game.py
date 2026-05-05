@@ -5,8 +5,10 @@ Pas de dépendances internes — peut être importé par db.py et server.py.
 """
 from __future__ import annotations
 
+import functools
 import json
 import os
+import random
 import secrets
 import sqlite3
 import time
@@ -93,15 +95,14 @@ def next_full_hour(ts: int) -> int:
 
 def pick_weighted_item() -> dict:
     rates = DATASET.get("dropRates", RARITY_WEIGHTS)
-    rarity = secrets.SystemRandom().choices(
-        list(rates.keys()), weights=list(rates.values()), k=1
-    )[0]
+    rarity = random.choices(list(rates.keys()), weights=list(rates.values()), k=1)[0]
     pool = [item for item in DATASET["items"] if item["rarity"] == rarity]
     if not pool:
         pool = DATASET["items"]
     return secrets.choice(pool)
 
 
+@functools.lru_cache(maxsize=None)
 def poster_svg(item_id: str) -> bytes:
     item = ITEMS.get(item_id)
     rarity = (item or {"rarity": "C"})["rarity"]

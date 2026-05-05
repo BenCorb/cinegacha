@@ -123,6 +123,15 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE collection_state ADD COLUMN watchlist INTEGER NOT NULL DEFAULT 0"
             )
+        conn.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_inventory_user ON inventory(user_id);
+            CREATE INDEX IF NOT EXISTS idx_rolls_user     ON rolls(user_id);
+            CREATE INDEX IF NOT EXISTS idx_trades_from    ON trades(from_user_id);
+            CREATE INDEX IF NOT EXISTS idx_trades_to      ON trades(to_user_id);
+            CREATE INDEX IF NOT EXISTS idx_cstate_user    ON collection_state(user_id);
+            """
+        )
 
 
 # ---------------------------------------------------------------------------
