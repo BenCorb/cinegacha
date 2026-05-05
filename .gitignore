@@ -6,3 +6,5 @@ data/gachapon.sqlite*
 data/backups/
 data/sources/
 data/dataset/
+scripts/film_database.py
+films.json

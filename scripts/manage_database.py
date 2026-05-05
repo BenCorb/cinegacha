@@ -2,13 +2,10 @@
 from __future__ import annotations
 
 import argparse
-import html as html_lib
 import json
 import math
 import os
-import re
 import time
-import urllib.error
 import urllib.parse
 import urllib.request
 from pathlib import Path
@@ -20,24 +17,14 @@ DEFAULT_DATASET_ID = "cinegacha"
 DROP_RATES = {"C": 55, "UC": 28, "R": 12, "UR": 4, "L": 1}
 RARITY_BUCKETS = (("L", 0.02), ("UR", 0.10), ("R", 0.30), ("UC", 0.60))
 
-LETTERBOXD_HEADERS = {
-    "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X) Safari/605.1.15",
-    "Accept-Language": "en-US,en;q=0.9,fr;q=0.8",
-}
 TMDB_SEARCH_API = "https://api.themoviedb.org/3/search/movie"
 TMDB_IMAGE_BASE = "https://image.tmdb.org/t/p/w500"
 
 
-def request_text(url: str, headers: dict[str, str], timeout: int = 30) -> tuple[str, str]:
+def request_json(url: str, headers: dict[str, str], timeout: int = 30) -> dict:
     request = urllib.request.Request(url, headers=headers)
     with urllib.request.urlopen(request, timeout=timeout) as response:
-        final_url = response.geturl()
-        return response.read().decode("utf-8", errors="replace"), final_url
-
-
-def request_json(url: str, headers: dict[str, str], timeout: int = 30) -> dict:
-    text, _ = request_text(url, headers, timeout)
-    return json.loads(text)
+        return json.loads(response.read().decode("utf-8"))
 
 
 def download(url: str, headers: dict[str, str], timeout: int = 30) -> bytes:
@@ -144,183 +131,25 @@ def select_or_create_dataset() -> tuple[Path, dict, bool]:
     return dataset_path(dataset_id), dataset, True
 
 
-def normalize_url(url: str) -> str:
-    return url.strip().rstrip("/") + "/"
-
-
-def list_page_url(list_url: str, page: int) -> str:
-    base = normalize_url(list_url)
-    return base if page == 1 else f"{base}page/{page}/"
-
-
-def extract_film_urls(html: str) -> list[str]:
-    urls = []
-    for href in re.findall(r'data-target-link=["\'](/film/[^"\']+/)["\']', html):
-        urls.append(urllib.parse.urljoin("https://letterboxd.com", href))
-
-    seen = set()
-    unique = []
-    for url in urls:
-        if url not in seen:
-            seen.add(url)
-            unique.append(url)
-    return unique
-
-
-def get_letterboxd_film_urls(list_url: str) -> list[str]:
-    urls: list[str] = []
-    seen = set()
-    for page in range(1, 201):
-        url = list_page_url(list_url, page)
-        print(f"Analyse page {page}: {url}")
-        try:
-            html, _ = request_text(url, LETTERBOXD_HEADERS)
-        except urllib.error.HTTPError as exc:
-            if exc.code == 404:
-                break
-            raise
-        page_urls = extract_film_urls(html)
-        if not page_urls:
-            break
-        for film_url in page_urls:
-            if film_url not in seen:
-                seen.add(film_url)
-                urls.append(film_url)
-        print(f"Total provisoire: {len(urls)}")
-        time.sleep(0.3)
-    return urls
-
-
-def strip_tags(text: str) -> str:
-    return html_lib.unescape(re.sub(r"<[^>]+>", " ", text)).replace("\xa0", " ")
-
-
-def clean_spaces(text: str | None) -> str | None:
-    if text is None:
-        return None
-    return re.sub(r"\s+", " ", html_lib.unescape(text)).strip()
-
-
-def clean_int(value: object) -> int | None:
-    if value is None:
-        return None
-    match = re.search(r"\d+", html_lib.unescape(str(value)).replace(",", ""))
-    return int(match.group(0)) if match else None
-
-
-def clean_float(value: object) -> float | None:
-    if value is None:
-        return None
-    match = re.search(r"\d+(?:\.\d+)?", str(value))
-    return float(match.group(0)) if match else None
-
-
-def meta_content(html: str, pattern: str) -> str | None:
-    match = re.search(pattern, html, flags=re.I | re.S)
-    return clean_spaces(match.group(1)) if match else None
-
-
-def parse_name_year(html: str) -> tuple[str | None, int | None]:
-    candidates = [
-        meta_content(html, r'<meta[^>]+property=["\']og:title["\'][^>]+content=["\']([^"\']+)["\']'),
-        meta_content(html, r'<meta[^>]+name=["\']twitter:title["\'][^>]+content=["\']([^"\']+)["\']'),
-        clean_spaces(strip_tags(match.group(1))) if (match := re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)) else None,
-    ]
-    for text in candidates:
-        if not text:
-            continue
-        text = text.replace("\u200e", "").strip()
-        match = re.search(r"^(.*?)\s+\((\d{4})\)", text)
-        if match:
-            return match.group(1).strip(), int(match.group(2))
-    return None, None
-
-
-def parse_director(html: str) -> str | None:
-    block_match = re.search(r'<div[^>]+class=["\'][^"\']*productioninfo[^"\']*["\'][^>]*>(.*?)</section>', html, re.I | re.S)
-    block = block_match.group(1) if block_match else html
-    credits = re.findall(r'<p[^>]+class=["\'][^"\']*credits[^"\']*["\'][^>]*>(.*?)</p>', block, re.I | re.S)
-    for credit in credits:
-        if "Directed by" not in strip_tags(credit):
-            continue
-        names = [clean_spaces(strip_tags(name)) for name in re.findall(r'<a[^>]+class=["\'][^"\']*contributor[^"\']*["\'][^>]*>(.*?)</a>', credit, re.I | re.S)]
-        names = [name for name in names if name]
-        if names:
-            return ", ".join(names)
-    return None
-
-
-def parse_rating_and_count(html: str) -> tuple[float | None, int | None]:
-    for raw in re.findall(r'<script[^>]+type=["\']application/ld\+json["\'][^>]*>(.*?)</script>', html, re.I | re.S):
-        raw = raw.replace("/* <![CDATA[ */", "").replace("/* ]]> */", "").strip()
-        try:
-            data = json.loads(raw)
-        except json.JSONDecodeError:
-            continue
-        items = data if isinstance(data, list) else [data]
-        for item in items:
-            if not isinstance(item, dict):
-                continue
-            aggregate = item.get("aggregateRating")
-            if isinstance(aggregate, dict):
-                return clean_float(aggregate.get("ratingValue")), clean_int(aggregate.get("ratingCount"))
-
-    twitter_rating = meta_content(html, r'<meta[^>]+name=["\']twitter:data2["\'][^>]+content=["\']([^"\']+)["\']')
-    return clean_float(twitter_rating), None
-
-
-def parse_letterboxd_film(film_url: str) -> dict:
-    html, final_url = request_text(film_url, LETTERBOXD_HEADERS)
-    name, year = parse_name_year(html)
-    rating, review_count = parse_rating_and_count(html)
-    return {
-        "name": name,
-        "year": year,
-        "director": parse_director(html),
-        "rating": rating,
-        "reviewCount": review_count,
-        "url": final_url.rstrip("/") + "/",
-    }
-
-
-def import_from_letterboxd() -> list[dict]:
-    print("\n=== Import depuis une liste Letterboxd ===")
-    list_url = prompt("URL de la liste Letterboxd")
-    if not list_url:
+def load_films_json() -> list[dict]:
+    print("\n=== Import depuis un JSON ===")
+    raw_path = prompt("Chemin du fichier JSON")
+    if not raw_path:
         print("Import annule.")
         return []
 
-    film_urls = get_letterboxd_film_urls(list_url)
-    print(f"\nFilms trouves: {len(film_urls)}")
-    if not film_urls:
-        return []
+    path = Path(raw_path).expanduser()
+    if not path.is_absolute():
+        path = ROOT / path
+    data = json.loads(path.read_text(encoding="utf-8"))
+    if not isinstance(data, list):
+        raise ValueError("Le fichier JSON doit contenir une liste de films.")
 
-    count = prompt_int("Combien de films importer ? 0 = tout", 0, 0, len(film_urls))
-    if count == 0:
-        count = len(film_urls)
-
-    films = []
-    for index, url in enumerate(film_urls[:count], start=1):
-        print(f"{index}/{count} {url}")
-        try:
-            film = parse_letterboxd_film(url)
-            films.append(film)
-            if not film.get("name"):
-                print("  Titre introuvable.")
-            if film.get("reviewCount") is None:
-                print("  reviewCount introuvable.")
-        except Exception as exc:
-            print(f"  Erreur: {exc}")
-            films.append({
-                "name": None,
-                "year": None,
-                "director": None,
-                "rating": None,
-                "reviewCount": None,
-                "url": url,
-                "error": str(exc),
-            })
-        time.sleep(0.6)
+    films = [film for film in data if isinstance(film, dict) and film.get("name")]
+    skipped = len(data) - len(films)
+    print(f"Films importables: {len(films)}")
+    if skipped:
+        print(f"Entrees ignorees: {skipped}")
     return films
 
 
@@ -537,13 +366,13 @@ def run_interactive() -> None:
 
     print(f"\nDatabase: {dataset['name']} ({dataset['id']})")
     actions = {
-        "import_letterboxd": prompt_yes_no("Importer depuis une liste Letterboxd ?", default=is_new),
+        "import_json": prompt_yes_no("Importer depuis un fichier JSON ?", default=is_new),
         "rarity": prompt_yes_no("Creer/recalculer la rarete des cartes ?", default=True),
         "posters": prompt_yes_no("Importer les posters manquants depuis TMDb ?", default=False),
     }
 
-    if actions["import_letterboxd"]:
-        imported = import_from_letterboxd()
+    if actions["import_json"]:
+        imported = load_films_json()
         current_films = dataset_to_source_films(dataset)
         merged_films, duplicates = merge_films(current_films, imported)
         normalize_items(dataset, merged_films)

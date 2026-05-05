@@ -42,8 +42,28 @@ python3 scripts/manage_database.py
 ```
 
 Le script permet de choisir les actions a realiser : editer une database existante,
-creer une nouvelle database, importer depuis une liste Letterboxd, supprimer les
+creer une nouvelle database, importer depuis un fichier JSON, supprimer les
 doublons, recalculer la rarete des cartes et importer les posters manquants.
+
+Format JSON attendu :
+
+```json
+[
+  {
+    "name": "Tropical Malady",
+    "year": 2004,
+    "director": "Apichatpong Weerasethakul",
+    "rating": 4.1,
+    "reviewCount": 12345,
+    "url": "https://example.com/film/tropical-malady/"
+  }
+]
+```
+
+Un script local ignore par Git peut etre place dans `scripts/film_database.py`.
+S'il existe, il exporte un fichier `films.json` compatible avec
+`scripts/manage_database.py`.
+
 Pour les posters, creer une cle TMDb puis lancer le script avec une des variables :
 
 ```bash
