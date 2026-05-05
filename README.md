@@ -50,12 +50,12 @@ Format JSON attendu :
 ```json
 [
   {
-    "name": "Tropical Malady",
-    "year": 2004,
-    "director": "Apichatpong Weerasethakul",
+    "name": "The Capsule Journey",
+    "year": 2026,
+    "director": "Alex Sample",
     "rating": 4.1,
     "reviewCount": 12345,
-    "url": "https://example.com/film/tropical-malady/"
+    "url": "https://example.com/films/the-capsule-journey/"
   }
 ]
 ```
