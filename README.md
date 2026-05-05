@@ -60,10 +60,6 @@ Format JSON attendu :
 ]
 ```
 
-Un script local ignore par Git peut etre place dans `scripts/film_database.py`.
-S'il existe, il exporte un fichier `films.json` compatible avec
-`scripts/manage_database.py`.
-
 Pour les posters, creer une cle TMDb puis lancer le script avec une des variables :
 
 ```bash
