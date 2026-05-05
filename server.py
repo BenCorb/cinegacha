@@ -30,7 +30,6 @@ from game import (
     add_item,
     collection_for,
     collection_summary,
-    credit_payload,
     inventory_count,
     item_payload,
     leaderboard,
@@ -40,7 +39,6 @@ from game import (
     poster_svg,
     refill_user,
     trade_payload,
-    user_credits,
     user_payload,
 )
 from db import (
@@ -182,7 +180,7 @@ class Handler(SimpleHTTPRequestHandler):
                         "items": collection_for(conn, user["id"]),
                         "owned": owned,
                         "total": len(ITEMS),
-                        **credit_payload(conn, user["id"]),
+                        **(user_payload(user) or {}),
                     })
                     return
 
@@ -288,21 +286,23 @@ class Handler(SimpleHTTPRequestHandler):
 
                 # --- Tourner ---
                 if parsed.path == "/api/gacha/roll":
-                    credits = user_credits(conn, user["id"])
+                    credits = int(user["credits"])
                     if credits < ROLL_COST:
                         raise ApiError(HTTPStatus.PAYMENT_REQUIRED, "Credits insuffisants pour tourner la manette.")
                     item = pick_weighted_item()
                     roll_id = secrets.token_urlsafe(12)
-                    conn.execute("UPDATE users SET credits = ? WHERE id = ?", (credits - ROLL_COST, user["id"]))
+                    new_credits = credits - ROLL_COST
+                    conn.execute("UPDATE users SET credits = ? WHERE id = ?", (new_credits, user["id"]))
                     conn.execute(
                         "INSERT INTO rolls (id, user_id, item_id, opened, created_at) VALUES (?, ?, ?, 0, ?)",
                         (roll_id, user["id"], item["id"], now()),
                     )
+                    user["credits"] = new_credits
                     self.send_json({
                         "rollId": roll_id,
                         "rarity": item["rarity"],
                         "capsule": CAPSULES.get(item["rarity"], CAPSULES["C"]),
-                        **credit_payload(conn, user["id"]),
+                        **(user_payload(user) or {}),
                     }, HTTPStatus.CREATED)
                     return
 
@@ -335,13 +335,14 @@ class Handler(SimpleHTTPRequestHandler):
                         raise ApiError(HTTPStatus.CONFLICT, "Tu peux vendre seulement une carte en double.")
                     earned = SELL_PRICES.get(ITEMS[item_id]["rarity"], 0)
                     add_item(conn, user["id"], item_id, -1)
-                    credits = user_credits(conn, user["id"]) + earned
-                    conn.execute("UPDATE users SET credits = ? WHERE id = ?", (credits, user["id"]))
+                    new_credits = int(user["credits"]) + earned
+                    conn.execute("UPDATE users SET credits = ? WHERE id = ?", (new_credits, user["id"]))
+                    user["credits"] = new_credits
                     self.send_json({
                         "itemId": item_id,
                         "count": count - 1,
                         "earned": earned,
-                        **credit_payload(conn, user["id"]),
+                        **(user_payload(user) or {}),
                     })
                     return
 

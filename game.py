@@ -71,6 +71,10 @@ def load_dataset() -> dict:
 DATASET = load_dataset()
 ITEMS: dict[str, dict] = {item["id"]: item for item in DATASET["items"]}
 
+_POOLS_BY_RARITY: dict[str, list[dict]] = {}
+for _item in DATASET["items"]:
+    _POOLS_BY_RARITY.setdefault(_item["rarity"], []).append(_item)
+
 
 # ---------------------------------------------------------------------------
 # Utilitaires temporels
@@ -96,9 +100,7 @@ def next_full_hour(ts: int) -> int:
 def pick_weighted_item() -> dict:
     rates = DATASET.get("dropRates", RARITY_WEIGHTS)
     rarity = random.choices(list(rates.keys()), weights=list(rates.values()), k=1)[0]
-    pool = [item for item in DATASET["items"] if item["rarity"] == rarity]
-    if not pool:
-        pool = DATASET["items"]
+    pool = _POOLS_BY_RARITY.get(rarity) or DATASET["items"]
     return secrets.choice(pool)
 
 
@@ -167,13 +169,14 @@ def user_credits(conn: sqlite3.Connection, user_id: int) -> int:
 # Crédits & recharge horaire
 # ---------------------------------------------------------------------------
 
-def refill_user(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row:
+def refill_user(conn: sqlite3.Connection, user_id: int) -> dict:
     row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
     if not row:
         raise ApiError(HTTPStatus.UNAUTHORIZED, "Connexion requise.")
+    data = dict(row)
     ts = now()
-    credits = int(row["credits"])
-    last_refill = int(row["last_credit_refill_at"] or row["created_at"] or ts)
+    credits = data["credits"]
+    last_refill = int(data["last_credit_refill_at"] or data["created_at"] or ts)
     if last_refill <= 0:
         last_refill = ts
     elapsed_hours = max(0, (hour_floor(ts) - hour_floor(last_refill)) // 3600)
@@ -187,8 +190,9 @@ def refill_user(conn: sqlite3.Connection, user_id: int) -> sqlite3.Row:
             "UPDATE users SET credits = ?, last_credit_refill_at = ? WHERE id = ?",
             (next_credits, next_refill, user_id),
         )
-        row = conn.execute("SELECT * FROM users WHERE id = ?", (user_id,)).fetchone()
-    return row
+        data["credits"] = next_credits
+        data["last_credit_refill_at"] = next_refill
+    return data
 
 
 # ---------------------------------------------------------------------------
@@ -308,7 +312,21 @@ def collection_summary(conn: sqlite3.Connection, user_id: int) -> dict:
     }
 
 
+_leaderboard_cache: tuple[float, list] | None = None
+_LEADERBOARD_TTL = 30
+
+
 def leaderboard(conn: sqlite3.Connection) -> list[dict]:
+    global _leaderboard_cache
+    ts = time.monotonic()
+    if _leaderboard_cache is not None and ts - _leaderboard_cache[0] < _LEADERBOARD_TTL:
+        return _leaderboard_cache[1]
+    result = _compute_leaderboard(conn)
+    _leaderboard_cache = (ts, result)
+    return result
+
+
+def _compute_leaderboard(conn: sqlite3.Connection) -> list[dict]:
     total = len(DATASET["items"])
     rows = conn.execute(
         """
