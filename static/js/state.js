@@ -11,6 +11,8 @@ export const state = {
   users: [],
   trades: [],
   leaderboard: [],
+  achievements: [],
+  achievementQueue: [],
   publicCollection: null,
   leaderboardQuery: "",
   pendingRoll: null,

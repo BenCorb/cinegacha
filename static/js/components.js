@@ -41,14 +41,15 @@ export function walletHtml() {
 
 export function nav() {
   const tabs = [
-    ["gacha",      "Gachapon"],
-    ["collection", "Collection"],
-    ["leaderboard","Classement"],
-    ["login",      state.user ? state.user.username : "Connexion"],
+    ["gacha",        "Gachapon"],
+    ["collection",   "Collection"],
+    ["leaderboard",  "Classement"],
+    ["achievements", "Succès"],
+    ["login",        state.user ? state.user.username : "Connexion"],
   ];
   return tabs
     .map(([id, label]) =>
-      `<button class="ghost ${state.view === id ? "active" : ""}" data-view="${id}">${label}</button>`
+      `<button class="ghost ${state.view === id ? "active" : ""}" data-view="${id}">${escapeHtml(label)}</button>`
     )
     .join("");
 }
@@ -364,6 +365,73 @@ export function publicCollectionHtml(profile) {
       </select>
     </div>
     <div class="grid public-grid">${ownedItems.map(publicCardHtml).join("") || `<p>Aucune carte obtenue.</p>`}</div>
+  `;
+}
+
+// ---------------------------------------------------------------------------
+// Achievements
+// ---------------------------------------------------------------------------
+
+function achievementRowHtml(ach) {
+  const current = Number(ach.current || 0);
+  const target = Number(ach.target || 1);
+  const progress = Math.max(0, Math.min(100, Number(ach.progress || 0)));
+  return `
+    <div class="achievement-row ${ach.unlocked ? "is-unlocked" : "is-locked"}">
+      <div class="achievement-icon"></div>
+      <div class="achievement-info">
+        <strong>${escapeHtml(ach.name)}</strong>
+        <span>${escapeHtml(ach.description)}</span>
+        <div class="achievement-progress" aria-hidden="true"><span style="--progress:${progress}%"></span></div>
+      </div>
+      <div class="achievement-meta">
+        <span>${current}/${target}</span>
+        <strong>${ach.unlocked ? "" : "+"}${ach.reward}¥</strong>
+      </div>
+    </div>
+  `;
+}
+
+function visibleAchievementsForCategory(category, achievements) {
+  if (category.toLowerCase() === "divers") return achievements;
+  const nextLocked = achievements.find((ach) => !ach.unlocked);
+  return achievements.filter((ach) => ach.unlocked || ach === nextLocked);
+}
+
+export function achievementsViewHtml() {
+  const achs = state.achievements;
+  const total = achs.length;
+  const unlocked = achs.filter((a) => a.unlocked).length;
+  const percent = total ? Math.round((unlocked / total) * 100) : 0;
+
+  const seenCats = new Set();
+  const categories = [];
+  for (const a of achs) {
+    if (!seenCats.has(a.category)) { seenCats.add(a.category); categories.push(a.category); }
+  }
+
+  const categoriesHtml = categories.map((cat) => {
+    const items = visibleAchievementsForCategory(cat, achs.filter((a) => a.category === cat));
+    return `
+      <div class="achievement-category">
+        <h3 class="achievement-category-title">${escapeHtml(cat)}</h3>
+        <div class="achievement-list">${items.map(achievementRowHtml).join("")}</div>
+      </div>
+    `;
+  }).join("");
+
+  return `
+    <section class="panel stack">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Progression</p>
+          <h1>Succès</h1>
+        </div>
+        <span class="credits-stamp">${unlocked}/${total}</span>
+      </div>
+      <div class="progress-line"><span style="--progress:${percent}%"></span></div>
+      ${total ? `<div class="achievements-grid">${categoriesHtml}</div>` : `<p class="muted-copy">Chargement…</p>`}
+    </section>
   `;
 }
 

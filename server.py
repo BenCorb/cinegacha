@@ -27,7 +27,9 @@ from game import (
     SELL_PRICES,
     STARTING_CREDITS,
     STATIC_DIR,
+    achievements_for_user,
     add_item,
+    check_and_unlock_achievements,
     collection_for,
     collection_summary,
     inventory_count,
@@ -58,6 +60,13 @@ from db import (
 MAX_BODY = 64 * 1024
 ROLL_COUNTS = {1, 5, 10}
 RARITY_POWER = {"C": 0, "UC": 1, "R": 2, "UR": 3, "L": 4}
+
+
+def _unlock_achievements(conn: sqlite3.Connection, user: dict) -> list[dict]:
+    new_achievements = check_and_unlock_achievements(conn, user["id"])
+    if new_achievements:
+        user["credits"] = int(user["credits"]) + sum(a["reward"] for a in new_achievements)
+    return new_achievements
 
 
 def read_json_body(handler: SimpleHTTPRequestHandler) -> dict:
@@ -214,6 +223,10 @@ class Handler(SimpleHTTPRequestHandler):
                         })
                         return
 
+                if parsed.path == "/api/achievements":
+                    self.send_json({"achievements": achievements_for_user(conn, user["id"])})
+                    return
+
                 if parsed.path == "/api/trades":
                     rows = conn.execute(
                         """
@@ -312,12 +325,14 @@ class Handler(SimpleHTTPRequestHandler):
                     )
                     top_item = max(items, key=lambda item: RARITY_POWER.get(item["rarity"], 0))
                     user["credits"] = new_credits
+                    new_ach = _unlock_achievements(conn, user)
                     self.send_json({
                         "rollId": roll_ids[0],
                         "rollIds": roll_ids,
                         "count": roll_count,
                         "rarity": top_item["rarity"],
                         "capsule": CAPSULES.get(top_item["rarity"], CAPSULES["C"]),
+                        "newAchievements": new_ach,
                         **(user_payload(user) or {}),
                     }, HTTPStatus.CREATED)
                     return
@@ -356,10 +371,13 @@ class Handler(SimpleHTTPRequestHandler):
                         f"UPDATE rolls SET opened = 1 WHERE id IN ({placeholders})",
                         tuple(roll_ids),
                     )
+                    new_ach = _unlock_achievements(conn, user)
                     self.send_json({
                         "items": results,
                         "item": results[0]["item"],
                         "isDuplicate": results[0]["isDuplicate"],
+                        "newAchievements": new_ach,
+                        **(user_payload(user) or {}),
                     })
                     return
 
@@ -375,26 +393,41 @@ class Handler(SimpleHTTPRequestHandler):
                     add_item(conn, user["id"], item_id, -1)
                     new_credits = int(user["credits"]) + earned
                     conn.execute("UPDATE users SET credits = ? WHERE id = ?", (new_credits, user["id"]))
+                    conn.execute("UPDATE users SET total_sells = total_sells + 1 WHERE id = ?", (user["id"],))
                     user["credits"] = new_credits
+                    new_ach = _unlock_achievements(conn, user)
                     self.send_json({
                         "itemId": item_id,
                         "count": count - 1,
                         "earned": earned,
+                        "newAchievements": new_ach,
                         **(user_payload(user) or {}),
                     })
                     return
 
                 # --- Réinitialiser la collection ---
                 if parsed.path == "/api/collection/reset":
+                    ts = now()
                     conn.execute("DELETE FROM inventory WHERE user_id = ?", (user["id"],))
                     conn.execute("DELETE FROM collection_state WHERE user_id = ?", (user["id"],))
                     conn.execute("DELETE FROM rolls WHERE user_id = ?", (user["id"],))
+                    conn.execute("DELETE FROM user_achievements WHERE user_id = ?", (user["id"],))
                     conn.execute(
                         "DELETE FROM trades WHERE from_user_id = ? OR to_user_id = ?",
                         (user["id"], user["id"]),
                     )
-                    conn.execute("UPDATE users SET credits = ? WHERE id = ?", (STARTING_CREDITS, user["id"]))
-                    self.send_json({"ok": True})
+                    conn.execute(
+                        """
+                        UPDATE users
+                        SET credits = ?, last_credit_refill_at = ?, total_sells = 0
+                        WHERE id = ?
+                        """,
+                        (STARTING_CREDITS, ts, user["id"]),
+                    )
+                    user["credits"] = STARTING_CREDITS
+                    user["last_credit_refill_at"] = ts
+                    user["total_sells"] = 0
+                    self.send_json({"ok": True, **(user_payload(user) or {})})
                     return
 
                 # --- Marquer comme vu ---
@@ -413,7 +446,8 @@ class Handler(SimpleHTTPRequestHandler):
                         """,
                         (user["id"], item_id, seen),
                     )
-                    self.send_json({"itemId": item_id, "seen": bool(seen)})
+                    new_ach = _unlock_achievements(conn, user)
+                    self.send_json({"itemId": item_id, "seen": bool(seen), "newAchievements": new_ach})
                     return
 
                 # --- Favori ---
@@ -434,14 +468,16 @@ class Handler(SimpleHTTPRequestHandler):
                         """,
                         (user["id"], item_id, favorite),
                     )
-                    state = conn.execute(
+                    cs = conn.execute(
                         "SELECT favorite, watchlist FROM collection_state WHERE user_id = ? AND item_id = ?",
                         (user["id"], item_id),
                     ).fetchone()
+                    new_ach = _unlock_achievements(conn, user)
                     self.send_json({
                         "itemId": item_id,
-                        "favorite": bool(state["favorite"]),
-                        "watchlist": bool(state["watchlist"]),
+                        "favorite": bool(cs["favorite"]),
+                        "watchlist": bool(cs["watchlist"]),
+                        "newAchievements": new_ach,
                     })
                     return
 
@@ -463,14 +499,16 @@ class Handler(SimpleHTTPRequestHandler):
                         """,
                         (user["id"], item_id, watchlist),
                     )
-                    state = conn.execute(
+                    cs = conn.execute(
                         "SELECT favorite, watchlist FROM collection_state WHERE user_id = ? AND item_id = ?",
                         (user["id"], item_id),
                     ).fetchone()
+                    new_ach = _unlock_achievements(conn, user)
                     self.send_json({
                         "itemId": item_id,
-                        "favorite": bool(state["favorite"]),
-                        "watchlist": bool(state["watchlist"]),
+                        "favorite": bool(cs["favorite"]),
+                        "watchlist": bool(cs["watchlist"]),
+                        "newAchievements": new_ach,
                     })
                     return
 
@@ -498,7 +536,11 @@ class Handler(SimpleHTTPRequestHandler):
                         (trade_id, user["id"], to_user["id"], offer_item_id, offer_item_id, now()),
                     )
                     row = conn.execute("SELECT * FROM trades WHERE id = ?", (trade_id,)).fetchone()
-                    self.send_json({"trade": trade_payload(conn, row)}, HTTPStatus.CREATED)
+                    new_ach = _unlock_achievements(conn, user)
+                    self.send_json({
+                        "trade": trade_payload(conn, row),
+                        "newAchievements": new_ach,
+                    }, HTTPStatus.CREATED)
                     return
 
             raise ApiError(HTTPStatus.NOT_FOUND, "Route inconnue.")
