@@ -606,10 +606,13 @@ class Handler(SimpleHTTPRequestHandler):
                     if slot is not None and inventory_count(conn, user["id"], item_id) < 1:
                         raise ApiError(HTTPStatus.CONFLICT, "Tu dois obtenir ce film avant de le mettre en vitrine.")
                     _set_showcase_slot(conn, user["id"], item_id, slot)
+                    new_ach = _unlock_achievements(conn, user)
                     self.send_json({
                         "itemId": item_id,
                         "showcaseSlot": slot,
                         "items": owned_collection_for(conn, user["id"]),
+                        "newAchievements": new_ach,
+                        **(user_payload(user) or {}),
                     })
                     return
 

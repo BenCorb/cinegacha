@@ -37,6 +37,33 @@
       "target": 200
     },
     {
+      "id": "rolls_500",
+      "name": "Forcené de la manette",
+      "description": "Effectuer 500 tirages",
+      "reward": 250,
+      "category": "Tirages",
+      "metric": "rolls",
+      "target": 500
+    },
+    {
+      "id": "rolls_1000",
+      "name": "Roi du gachapon",
+      "description": "Effectuer 1000 tirages",
+      "reward": 350,
+      "category": "Tirages",
+      "metric": "rolls",
+      "target": 1000
+    },
+    {
+      "id": "rolls_1500",
+      "name": "Légende des capsules",
+      "description": "Effectuer 1500 tirages",
+      "reward": 500,
+      "category": "Tirages",
+      "metric": "rolls",
+      "target": 1500
+    },
+    {
       "id": "collection_10",
       "name": "Débutant",
       "description": "Obtenir 10 cartes différentes",
@@ -62,6 +89,42 @@
       "category": "Collection",
       "metric": "collection",
       "target": 100
+    },
+    {
+      "id": "collection_250",
+      "name": "Amateur éclairé",
+      "description": "Obtenir 250 cartes différentes",
+      "reward": 200,
+      "category": "Collection",
+      "metric": "collection",
+      "target": 250
+    },
+    {
+      "id": "collection_500",
+      "name": "Archiviste",
+      "description": "Obtenir 500 cartes différentes",
+      "reward": 300,
+      "category": "Collection",
+      "metric": "collection",
+      "target": 500
+    },
+    {
+      "id": "collection_666",
+      "name": "Cinéphile maudit",
+      "description": "Obtenir 666 cartes différentes",
+      "reward": 400,
+      "category": "Collection",
+      "metric": "collection",
+      "target": 666
+    },
+    {
+      "id": "collection_1000",
+      "name": "Conservateur",
+      "description": "Obtenir 1000 cartes différentes",
+      "reward": 450,
+      "category": "Collection",
+      "metric": "collection",
+      "target": 1000
     },
     {
       "id": "collection_full",
@@ -130,6 +193,60 @@
       "target": 50
     },
     {
+      "id": "seen_100",
+      "name": "Habitué des salles",
+      "description": "Marquer 100 films comme vus",
+      "reward": 100,
+      "category": "Films vus",
+      "metric": "seen",
+      "target": 100
+    },
+    {
+      "id": "seen_250",
+      "name": "Marathonien",
+      "description": "Marquer 250 films comme vus",
+      "reward": 200,
+      "category": "Films vus",
+      "metric": "seen",
+      "target": 250
+    },
+    {
+      "id": "seen_500",
+      "name": "Cinévore",
+      "description": "Marquer 500 films comme vus",
+      "reward": 300,
+      "category": "Films vus",
+      "metric": "seen",
+      "target": 500
+    },
+    {
+      "id": "seen_750",
+      "name": "Boulimique de pellicule",
+      "description": "Marquer 750 films comme vus",
+      "reward": 400,
+      "category": "Films vus",
+      "metric": "seen",
+      "target": 750
+    },
+    {
+      "id": "seen_1000",
+      "name": "Mille séances",
+      "description": "Marquer 1000 films comme vus",
+      "reward": 450,
+      "category": "Films vus",
+      "metric": "seen",
+      "target": 1000
+    },
+    {
+      "id": "seen_full",
+      "name": "Le fou du cinéma",
+      "description": "Marquer tous les films comme vus",
+      "reward": 500,
+      "category": "Films vus",
+      "metric": "seen",
+      "target": "dataset_total"
+    },
+    {
       "id": "first_trade",
       "name": "Généreux",
       "description": "Envoyer une première carte",
@@ -148,6 +265,33 @@
       "target": 5
     },
     {
+      "id": "trades_25",
+      "name": "Négociant",
+      "description": "Envoyer 25 cartes",
+      "reward": 120,
+      "category": "Échanges",
+      "metric": "trades_sent",
+      "target": 25
+    },
+    {
+      "id": "trades_50",
+      "name": "Distributeur",
+      "description": "Envoyer 50 cartes",
+      "reward": 250,
+      "category": "Échanges",
+      "metric": "trades_sent",
+      "target": 50
+    },
+    {
+      "id": "trades_100",
+      "name": "Mécène",
+      "description": "Envoyer 100 cartes",
+      "reward": 450,
+      "category": "Échanges",
+      "metric": "trades_sent",
+      "target": 100
+    },
+    {
       "id": "first_sell",
       "name": "Première vente",
       "description": "Vendre une première carte en double",
@@ -164,6 +308,60 @@
       "category": "Ventes",
       "metric": "sells",
       "target": 10
+    },
+    {
+      "id": "sells_25",
+      "name": "Brocanteur",
+      "description": "Vendre 25 cartes en double",
+      "reward": 60,
+      "category": "Ventes",
+      "metric": "sells",
+      "target": 25
+    },
+    {
+      "id": "sells_50",
+      "name": "Revendeur",
+      "description": "Vendre 50 cartes en double",
+      "reward": 100,
+      "category": "Ventes",
+      "metric": "sells",
+      "target": 50
+    },
+    {
+      "id": "sells_100",
+      "name": "Grossiste",
+      "description": "Vendre 100 cartes en double",
+      "reward": 180,
+      "category": "Ventes",
+      "metric": "sells",
+      "target": 100
+    },
+    {
+      "id": "sells_250",
+      "name": "Magnat",
+      "description": "Vendre 250 cartes en double",
+      "reward": 300,
+      "category": "Ventes",
+      "metric": "sells",
+      "target": 250
+    },
+    {
+      "id": "sells_750",
+      "name": "Spéculateur",
+      "description": "Vendre 750 cartes en double",
+      "reward": 450,
+      "category": "Ventes",
+      "metric": "sells",
+      "target": 750
+    },
+    {
+      "id": "sells_1000",
+      "name": "Baron des doublons",
+      "description": "Vendre 1000 cartes en double",
+      "reward": 500,
+      "category": "Ventes",
+      "metric": "sells",
+      "target": 1000
     },
     {
       "id": "first_favorite",
@@ -191,6 +389,15 @@
       "category": "Divers",
       "metric": "credits",
       "target": 5000
+    },
+    {
+      "id": "first_showcase",
+      "name": "Tête d'affiche",
+      "description": "Mettre une carte en vitrine",
+      "reward": 20,
+      "category": "Divers",
+      "metric": "showcase",
+      "target": 1
     }
   ]
 }

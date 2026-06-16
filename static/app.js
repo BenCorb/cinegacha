@@ -806,6 +806,8 @@ async function setShowcaseSlot(itemId, slot) {
       state.collection = updated.items;
       syncResultItems(state.collection);
     }
+    if (typeof updated.credits === "number") mergeUser(updated);
+    handleNewAchievements(updated);
     state.activeCardMenu = null;
     state.cardMenuMode = null;
     showToast(slot === null ? "Carte retiree de la vitrine." : "Vitrine mise a jour.", "success");

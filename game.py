@@ -371,6 +371,7 @@ ACHIEVEMENT_METRICS = {
     "favorites",
     "watchlist",
     "credits",
+    "showcase",
 }
 
 
@@ -444,7 +445,8 @@ def _user_metrics(conn: sqlite3.Connection, user_id: int) -> dict:
         SELECT
             COALESCE(SUM(seen), 0)      AS seen,
             COALESCE(SUM(favorite), 0)  AS favorites,
-            COALESCE(SUM(watchlist), 0) AS watchlist
+            COALESCE(SUM(watchlist), 0) AS watchlist,
+            COUNT(showcase_slot)        AS showcase
         FROM collection_state WHERE user_id = ?
         """,
         (user_id,),
@@ -479,6 +481,7 @@ def _user_metrics(conn: sqlite3.Connection, user_id: int) -> dict:
         "seen":        int(cs["seen"]) if cs else 0,
         "favorites":   int(cs["favorites"]) if cs else 0,
         "watchlist":   int(cs["watchlist"]) if cs else 0,
+        "showcase":    int(cs["showcase"]) if cs else 0,
         "trades_sent": trades_sent,
         "sells":       int(urow["total_sells"]) if urow else 0,
         "credits":     int(urow["credits"]) if urow else 0,
