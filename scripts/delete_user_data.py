@@ -31,6 +31,10 @@ def related_counts(user_id: int) -> dict[str, int]:
                 "SELECT COUNT(*) AS total FROM trades WHERE from_user_id = ? OR to_user_id = ?",
                 (user_id, user_id),
             ).fetchone()["total"],
+            "achievements": conn.execute(
+                "SELECT COUNT(*) AS total FROM user_achievements WHERE user_id = ?",
+                (user_id,),
+            ).fetchone()["total"],
         }
 
 
@@ -58,6 +62,7 @@ def delete_user(username: str, assume_yes: bool) -> int:
     print(f"Tirages: {counts['rolls']}")
     print(f"Etats collection: {counts['collection_state']}")
     print(f"Echanges lies: {counts['trades']}")
+    print(f"Succes: {counts['achievements']}")
 
     if not assume_yes:
         expected = f"SUPPRIMER {user['username']}"

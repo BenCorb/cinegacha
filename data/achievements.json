@@ -1,0 +1,196 @@
+{
+  "achievements": [
+    {
+      "id": "first_roll",
+      "name": "Premier tour",
+      "description": "Faire son premier tirage",
+      "reward": 20,
+      "category": "Tirages",
+      "metric": "rolls",
+      "target": 1
+    },
+    {
+      "id": "rolls_10",
+      "name": "Accro",
+      "description": "Effectuer 10 tirages",
+      "reward": 30,
+      "category": "Tirages",
+      "metric": "rolls",
+      "target": 10
+    },
+    {
+      "id": "rolls_50",
+      "name": "Régulier",
+      "description": "Effectuer 50 tirages",
+      "reward": 50,
+      "category": "Tirages",
+      "metric": "rolls",
+      "target": 50
+    },
+    {
+      "id": "rolls_200",
+      "name": "Obsessionnel",
+      "description": "Effectuer 200 tirages",
+      "reward": 150,
+      "category": "Tirages",
+      "metric": "rolls",
+      "target": 200
+    },
+    {
+      "id": "collection_10",
+      "name": "Débutant",
+      "description": "Obtenir 10 cartes différentes",
+      "reward": 20,
+      "category": "Collection",
+      "metric": "collection",
+      "target": 10
+    },
+    {
+      "id": "collection_50",
+      "name": "Cinéphile",
+      "description": "Obtenir 50 cartes différentes",
+      "reward": 50,
+      "category": "Collection",
+      "metric": "collection",
+      "target": 50
+    },
+    {
+      "id": "collection_100",
+      "name": "Collectionneur",
+      "description": "Obtenir 100 cartes différentes",
+      "reward": 100,
+      "category": "Collection",
+      "metric": "collection",
+      "target": 100
+    },
+    {
+      "id": "collection_full",
+      "name": "Encyclopédiste",
+      "description": "Compléter toute la collection",
+      "reward": 500,
+      "category": "Collection",
+      "metric": "collection",
+      "target": "dataset_total"
+    },
+    {
+      "id": "first_R",
+      "name": "Coup de chance",
+      "description": "Obtenir sa première carte R",
+      "reward": 20,
+      "category": "Raretés",
+      "metric": "rarity_roll",
+      "rarity": "R",
+      "target": 1
+    },
+    {
+      "id": "first_UR",
+      "name": "Ultra-rare",
+      "description": "Obtenir sa première carte UR",
+      "reward": 50,
+      "category": "Raretés",
+      "metric": "rarity_roll",
+      "rarity": "UR",
+      "target": 1
+    },
+    {
+      "id": "first_L",
+      "name": "Légendaire",
+      "description": "Obtenir sa première carte L",
+      "reward": 100,
+      "category": "Raretés",
+      "metric": "rarity_roll",
+      "rarity": "L",
+      "target": 1
+    },
+    {
+      "id": "first_seen",
+      "name": "Premier film",
+      "description": "Marquer un premier film comme vu",
+      "reward": 10,
+      "category": "Films vus",
+      "metric": "seen",
+      "target": 1
+    },
+    {
+      "id": "seen_25",
+      "name": "Cinéphile confirmé",
+      "description": "Marquer 25 films comme vus",
+      "reward": 30,
+      "category": "Films vus",
+      "metric": "seen",
+      "target": 25
+    },
+    {
+      "id": "seen_50",
+      "name": "Critique",
+      "description": "Marquer 50 films comme vus",
+      "reward": 50,
+      "category": "Films vus",
+      "metric": "seen",
+      "target": 50
+    },
+    {
+      "id": "first_trade",
+      "name": "Généreux",
+      "description": "Envoyer une première carte",
+      "reward": 20,
+      "category": "Échanges",
+      "metric": "trades_sent",
+      "target": 1
+    },
+    {
+      "id": "trades_5",
+      "name": "Commerçant",
+      "description": "Envoyer 5 cartes",
+      "reward": 40,
+      "category": "Échanges",
+      "metric": "trades_sent",
+      "target": 5
+    },
+    {
+      "id": "first_sell",
+      "name": "Première vente",
+      "description": "Vendre une première carte en double",
+      "reward": 10,
+      "category": "Ventes",
+      "metric": "sells",
+      "target": 1
+    },
+    {
+      "id": "sells_10",
+      "name": "Liquidateur",
+      "description": "Vendre 10 cartes en double",
+      "reward": 30,
+      "category": "Ventes",
+      "metric": "sells",
+      "target": 10
+    },
+    {
+      "id": "first_favorite",
+      "name": "Premier favori",
+      "description": "Mettre une carte en favori",
+      "reward": 10,
+      "category": "Divers",
+      "metric": "favorites",
+      "target": 1
+    },
+    {
+      "id": "first_watchlist",
+      "name": "À voir",
+      "description": "Mettre une carte en watchlist",
+      "reward": 10,
+      "category": "Divers",
+      "metric": "watchlist",
+      "target": 1
+    },
+    {
+      "id": "credits_5000",
+      "name": "Plein les poches",
+      "description": "Atteindre 5 000¥",
+      "reward": 30,
+      "category": "Divers",
+      "metric": "credits",
+      "target": 5000
+    }
+  ]
+}

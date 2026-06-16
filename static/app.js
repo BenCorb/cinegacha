@@ -5,7 +5,7 @@ import {
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
 } from "./js/state.js";
 import {
-  accountPanelHtml, applyCollectionFilters, burstHtml,
+  accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
   cardHtml, collectionEmptyHtml, collectionStatsHtml,
   creditsPanelHtml, dropRatesHtml, filterCountText, filteredCollection,
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
@@ -21,6 +21,47 @@ const $ = (selector) => document.querySelector(selector);
 let creditTimerId = null;
 let creditRefreshInFlight = false;
 let messageTimer = null;
+let achievementToastTimer = null;
+
+// ---------------------------------------------------------------------------
+// Toast achievements
+// ---------------------------------------------------------------------------
+
+function processAchievementQueue() {
+  if (!state.achievementQueue.length || document.getElementById("achievementToast")) return;
+  const ach = state.achievementQueue.shift();
+
+  const toast = document.createElement("div");
+  toast.id = "achievementToast";
+  toast.className = "achievement-toast";
+  toast.innerHTML = `
+    <div class="achievement-toast-body">
+      <span class="achievement-toast-label">Succès débloqué</span>
+      <strong class="achievement-toast-name">${escapeHtml(ach.name)}</strong>
+      <span class="achievement-toast-reward">+${ach.reward}¥</span>
+    </div>
+    <button class="achievement-toast-close" type="button" aria-label="Fermer">×</button>
+  `;
+  document.body.appendChild(toast);
+
+  const dismiss = () => {
+    if (achievementToastTimer) { clearTimeout(achievementToastTimer); achievementToastTimer = null; }
+    toast.classList.add("is-dismissing");
+    setTimeout(() => { toast.remove(); processAchievementQueue(); }, 260);
+  };
+
+  toast.querySelector(".achievement-toast-close").addEventListener("click", dismiss);
+  achievementToastTimer = setTimeout(dismiss, 3500);
+}
+
+function handleNewAchievements(data) {
+  const newAchs = data?.newAchievements;
+  if (!Array.isArray(newAchs) || !newAchs.length) return;
+  state.achievementQueue.push(...newAchs);
+  processAchievementQueue();
+  // Invalider le cache achievements pour rafraîchir la vue si nécessaire
+  state.achievements = [];
+}
 
 function updateCreditTimer() {
   const timer = document.querySelector("[data-credit-timer]");
@@ -58,9 +99,14 @@ async function refresh({ shouldRender = true } = {}) {
   }
   try {
     const needsLeaderboard = state.view === "leaderboard";
-    const requests = [api("/api/collection"), api("/api/users")];
-    if (needsLeaderboard) requests.push(api("/api/leaderboard"));
-    const [collection, users, leaderboardData] = await Promise.all(requests);
+    const needsAchievements = state.view === "achievements" || !state.achievements.length;
+    const requests = [
+      api("/api/collection"),
+      api("/api/users"),
+      needsLeaderboard  ? api("/api/leaderboard")  : Promise.resolve(null),
+      needsAchievements ? api("/api/achievements") : Promise.resolve(null),
+    ];
+    const [collection, users, leaderboardData, achievementsData] = await Promise.all(requests);
     state.collection = collection.items;
     if (state.result?.item?.id) {
       const fresh = state.collection.find((item) => item.id === state.result.item.id);
@@ -68,7 +114,8 @@ async function refresh({ shouldRender = true } = {}) {
     }
     if (typeof collection.credits === "number") mergeUser(collection);
     state.users = users.users;
-    if (leaderboardData) state.leaderboard = leaderboardData.leaderboard || [];
+    if (leaderboardData)  state.leaderboard  = leaderboardData.leaderboard || [];
+    if (achievementsData) state.achievements = achievementsData.achievements || [];
     if (shouldRender) render();
   } catch (error) {
     if (error.status === 401) {
@@ -78,6 +125,8 @@ async function refresh({ shouldRender = true } = {}) {
       state.users      = [];
       state.trades     = [];
       state.leaderboard = [];
+      state.achievements = [];
+      state.achievementQueue = [];
       state.publicCollection = null;
       state.pendingRoll = null;
       state.result = null;
@@ -129,7 +178,10 @@ function renderShell(content) {
       state.view = button.dataset.view;
       state.message = "";
       if (messageTimer) clearTimeout(messageTimer);
-      if (state.view === "leaderboard" && prevView !== "leaderboard") {
+      if (
+        (state.view === "leaderboard"  && prevView !== "leaderboard") ||
+        (state.view === "achievements" && prevView !== "achievements")
+      ) {
         refresh({ shouldRender: true });
       } else {
         render();
@@ -226,6 +278,7 @@ async function roll() {
   try {
     state.pendingRoll = await api("/api/gacha/roll", { method: "POST", body: "{}" });
     if (typeof state.pendingRoll.credits === "number") mergeUser(state.pendingRoll);
+    handleNewAchievements(state.pendingRoll);
     state.rolling = false;
     setTimeout(render, 650);
   } catch (e) {
@@ -246,6 +299,7 @@ async function openCapsule() {
     state.pendingRoll = null;
     state.openingRarity = state.result.item.rarity || "C";
     state.opening = true;
+    handleNewAchievements(state.result);
     await refresh({ shouldRender: false });
     await preloadImage(state.result.item.image);
     state.view = "gacha";
@@ -440,6 +494,8 @@ function renderLogin() {
       state.user       = null;
       state.collection = [];
       state.leaderboard = [];
+      state.achievements = [];
+      state.achievementQueue = [];
       state.publicCollection = null;
       state.view = "login";
       render();
@@ -500,9 +556,12 @@ async function regenerateConnectionKey() {
 async function resetCollection() {
   if (!confirm("Reset toute ta collection, tes cartes vues et tes échanges ?")) return;
   try {
-    await api("/api/collection/reset", { method: "POST", body: "{}" });
+    const reset = await api("/api/collection/reset", { method: "POST", body: "{}" });
+    mergeUser(reset);
     state.collection  = [];
     state.trades      = [];
+    state.achievements = [];
+    state.achievementQueue = [];
     state.result      = null;
     state.pendingRoll = null;
     state.message = "Collection reset.";
@@ -523,6 +582,7 @@ async function sellCard(itemId) {
   try {
     const sold = await api("/api/collection/sell", { method: "POST", body: JSON.stringify({ itemId }) });
     mergeUser(sold);
+    handleNewAchievements(sold);
     state.activeCardMenu = null;
     state.cardMenuMode = null;
     state.message = `Carte vendue +${sold.earned}¥.`;
@@ -540,7 +600,8 @@ async function sendCard(event) {
   const itemId = form.dataset.sendForm;
   const data = Object.fromEntries(new FormData(form));
   try {
-    await api("/api/trades", { method: "POST", body: JSON.stringify({ offerItemId: itemId, toUsername: data.toUsername }) });
+    const sent = await api("/api/trades", { method: "POST", body: JSON.stringify({ offerItemId: itemId, toUsername: data.toUsername }) });
+    handleNewAchievements(sent);
     state.activeCardMenu = null;
     state.cardMenuMode = null;
     state.message = "Carte envoyee.";
@@ -557,10 +618,11 @@ async function toggleSeen(event) {
   const currentView = state.view;
   const nextSeen = button.dataset.seenNext === "1";
   try {
-    await api("/api/collection/seen", {
+    const seenResult = await api("/api/collection/seen", {
       method: "POST",
       body: JSON.stringify({ itemId: button.dataset.seenId, seen: nextSeen }),
     });
+    handleNewAchievements(seenResult);
     const item = state.collection.find((entry) => entry.id === button.dataset.seenId);
     if (item) item.seen = nextSeen;
     if (state.result?.item?.id === button.dataset.seenId) state.result.item.seen = nextSeen;
@@ -590,6 +652,7 @@ async function toggleFavorite(event) {
       method: "POST",
       body: JSON.stringify({ itemId, favorite: nextFavorite }),
     });
+    handleNewAchievements(updated);
     const item = state.collection.find((entry) => entry.id === itemId);
     if (item) { item.favorite = updated.favorite; item.watchlist = updated.watchlist; }
     if (state.result?.item?.id === itemId) {
@@ -615,6 +678,7 @@ async function toggleWatchlist(event) {
       method: "POST",
       body: JSON.stringify({ itemId, watchlist: nextWatchlist }),
     });
+    handleNewAchievements(updated);
     const item = state.collection.find((entry) => entry.id === itemId);
     if (item) { item.favorite = updated.favorite; item.watchlist = updated.watchlist; }
     if (state.result?.item?.id === itemId) {
@@ -634,7 +698,8 @@ async function createTrade(event) {
   event.preventDefault();
   const form = new FormData(event.currentTarget);
   try {
-    await api("/api/trades", { method: "POST", body: JSON.stringify(Object.fromEntries(form)) });
+    const sent = await api("/api/trades", { method: "POST", body: JSON.stringify(Object.fromEntries(form)) });
+    handleNewAchievements(sent);
     state.message = "Carte envoyee.";
     await refresh();
   } catch (e) {
@@ -758,14 +823,32 @@ function bindInteractiveCards() {
 }
 
 // ---------------------------------------------------------------------------
+// Vue Succès
+// ---------------------------------------------------------------------------
+
+function renderAchievements() {
+  if (requireLogin()) return;
+  renderShell(achievementsViewHtml());
+  if (!state.achievements.length) {
+    api("/api/achievements")
+      .then((data) => {
+        state.achievements = data.achievements || [];
+        if (state.view === "achievements") renderShell(achievementsViewHtml());
+      })
+      .catch(() => {});
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Rendu principal
 // ---------------------------------------------------------------------------
 
 function render() {
-  if      (state.view === "collection")  renderCollection();
-  else if (state.view === "leaderboard") renderLeaderboard();
-  else if (state.view === "login")       renderLogin();
-  else                                   renderGacha();
+  if      (state.view === "collection")   renderCollection();
+  else if (state.view === "leaderboard")  renderLeaderboard();
+  else if (state.view === "achievements") renderAchievements();
+  else if (state.view === "login")        renderLogin();
+  else                                    renderGacha();
   bindInteractiveCards();
 }
 

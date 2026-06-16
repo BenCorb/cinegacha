@@ -25,6 +25,7 @@ STATIC_DIR = ROOT / "static"
 DATA_DIR = ROOT / "data"
 DATASET_DIR = DATA_DIR / os.environ.get("GACHA_DATASET_DIR", "dataset")
 DATASET_PATH = DATASET_DIR / "dataset.json"
+ACHIEVEMENTS_PATH = Path(os.environ.get("GACHA_ACHIEVEMENTS", DATA_DIR / "achievements.json"))
 DB_PATH = Path(os.environ.get("GACHA_DB", DATA_DIR / "gachapon.sqlite"))
 
 
@@ -72,8 +73,10 @@ DATASET = load_dataset()
 ITEMS: dict[str, dict] = {item["id"]: item for item in DATASET["items"]}
 
 _POOLS_BY_RARITY: dict[str, list[dict]] = {}
+_RARITY_ITEM_IDS: dict[str, list[str]] = {}
 for _item in DATASET["items"]:
     _POOLS_BY_RARITY.setdefault(_item["rarity"], []).append(_item)
+    _RARITY_ITEM_IDS.setdefault(_item["rarity"], []).append(_item["id"])
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +314,183 @@ def collection_summary(conn: sqlite3.Connection, user_id: int) -> dict:
         "byRarity": by_rarity,
     }
 
+
+# ---------------------------------------------------------------------------
+# Achievements
+# ---------------------------------------------------------------------------
+
+ACHIEVEMENT_METRICS = {
+    "rolls",
+    "collection",
+    "rarity_roll",
+    "seen",
+    "trades_sent",
+    "sells",
+    "favorites",
+    "watchlist",
+    "credits",
+}
+
+
+def _achievement_target(value: int | str) -> int:
+    if value == "dataset_total":
+        return len(ITEMS)
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return 0
+
+
+def _achievement_reward(value: int | str) -> int:
+    try:
+        return max(0, int(value))
+    except (TypeError, ValueError):
+        return -1
+
+
+def _normalize_achievement(raw: dict, index: int) -> tuple[str, dict]:
+    ach_id = str(raw.get("id", "")).strip()
+    if not ach_id:
+        raise ValueError(f"Achievement #{index + 1}: id manquant.")
+    metric = str(raw.get("metric", "")).strip()
+    if metric not in ACHIEVEMENT_METRICS:
+        raise ValueError(f"Achievement {ach_id!r}: metric inconnue {metric!r}.")
+    target = _achievement_target(raw.get("target", 1))
+    if target <= 0:
+        raise ValueError(f"Achievement {ach_id!r}: target doit etre positif.")
+    reward = _achievement_reward(raw.get("reward", 0))
+    if reward < 0:
+        raise ValueError(f"Achievement {ach_id!r}: reward doit etre positif ou nul.")
+    if metric == "rarity_roll" and str(raw.get("rarity", "")).strip() not in RARITY_WEIGHTS:
+        raise ValueError(f"Achievement {ach_id!r}: rarity invalide.")
+    return ach_id, {
+        "name": str(raw.get("name", ach_id)),
+        "description": str(raw.get("description", "")),
+        "reward": reward,
+        "category": str(raw.get("category", "Divers")),
+        "metric": metric,
+        "target": target,
+        **({"rarity": str(raw["rarity"]).strip()} if "rarity" in raw else {}),
+    }
+
+
+def load_achievements() -> dict[str, dict]:
+    with ACHIEVEMENTS_PATH.open("r", encoding="utf-8") as f:
+        data = json.load(f)
+    entries = data.get("achievements") if isinstance(data, dict) else data
+    if not isinstance(entries, list):
+        raise ValueError("Le fichier achievements doit contenir une liste ou une cle 'achievements'.")
+    result: dict[str, dict] = {}
+    for index, raw in enumerate(entries):
+        if not isinstance(raw, dict):
+            raise ValueError(f"Achievement #{index + 1}: entree invalide.")
+        ach_id, achievement = _normalize_achievement(raw, index)
+        if ach_id in result:
+            raise ValueError(f"Achievement {ach_id!r}: id duplique.")
+        result[ach_id] = achievement
+    return result
+
+
+ACHIEVEMENTS: dict[str, dict] = load_achievements()
+
+
+def _achievement_progress(conn: sqlite3.Connection, user_id: int, ach_id: str) -> tuple[int, int]:
+    def scalar(sql: str, params: tuple = ()) -> int:
+        return int(conn.execute(sql, params).fetchone()[0])
+
+    ach = ACHIEVEMENTS.get(ach_id)
+    if not ach:
+        return 0, 1
+    metric = ach["metric"]
+    target = int(ach["target"])
+
+    if metric == "rolls":
+        return scalar("SELECT COUNT(*) FROM rolls WHERE user_id = ?", (user_id,)), target
+    if metric == "collection":
+        return scalar(
+            "SELECT COUNT(DISTINCT item_id) FROM inventory WHERE user_id = ? AND count > 0", (user_id,)
+        ), target
+    if metric == "rarity_roll":
+        rarity = ach.get("rarity", "")
+        ids = _RARITY_ITEM_IDS.get(rarity, [])
+        if not ids:
+            return 0, target
+        ph = ",".join("?" * len(ids))
+        return scalar(
+            f"SELECT COUNT(*) FROM rolls WHERE user_id = ? AND item_id IN ({ph})",
+            (user_id, *ids),
+        ), target
+    if metric == "seen":
+        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND seen = 1", (user_id,)), target
+    if metric == "trades_sent":
+        return scalar("SELECT COUNT(*) FROM trades WHERE from_user_id = ?", (user_id,)), target
+    if metric == "sells":
+        return scalar("SELECT total_sells FROM users WHERE id = ?", (user_id,)), target
+    if metric == "favorites":
+        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND favorite = 1", (user_id,)), target
+    if metric == "watchlist":
+        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND watchlist = 1", (user_id,)), target
+    if metric == "credits":
+        return scalar("SELECT credits FROM users WHERE id = ?", (user_id,)), target
+    return 0, target
+
+
+def _check_achievement(conn: sqlite3.Connection, user_id: int, ach_id: str) -> bool:
+    current, target = _achievement_progress(conn, user_id, ach_id)
+    return target > 0 and current >= target
+
+
+def check_and_unlock_achievements(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    already = {
+        row["achievement_id"]
+        for row in conn.execute(
+            "SELECT achievement_id FROM user_achievements WHERE user_id = ?", (user_id,)
+        ).fetchall()
+    }
+    newly: list[dict] = []
+    for ach_id, ach in ACHIEVEMENTS.items():
+        if ach_id in already:
+            continue
+        if _check_achievement(conn, user_id, ach_id):
+            ts = now()
+            inserted = conn.execute(
+                "INSERT OR IGNORE INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)",
+                (user_id, ach_id, ts),
+            )
+            if inserted.rowcount == 0:
+                continue
+            conn.execute("UPDATE users SET credits = credits + ? WHERE id = ?", (ach["reward"], user_id))
+            newly.append({**ach, "id": ach_id, "unlockedAt": ts})
+    return newly
+
+
+def achievements_for_user(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    unlocked = {
+        row["achievement_id"]: row["unlocked_at"]
+        for row in conn.execute(
+            "SELECT achievement_id, unlocked_at FROM user_achievements WHERE user_id = ?", (user_id,)
+        ).fetchall()
+    }
+    result = []
+    for ach_id, ach in ACHIEVEMENTS.items():
+        current, target = _achievement_progress(conn, user_id, ach_id)
+        entry: dict = {
+            **ach,
+            "id": ach_id,
+            "unlocked": ach_id in unlocked,
+            "current": min(current, target),
+            "target": target,
+            "progress": round((min(current, target) / target) * 100) if target else 0,
+        }
+        if ach_id in unlocked:
+            entry["unlockedAt"] = unlocked[ach_id]
+        result.append(entry)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Leaderboard
+# ---------------------------------------------------------------------------
 
 _leaderboard_cache: tuple[float, list] | None = None
 _LEADERBOARD_TTL = 30
