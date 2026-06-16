@@ -954,10 +954,6 @@ input, select {
   outline-offset: 3px;
 }
 
-.card.showcase {
-  border-color: #a85572;
-}
-
 .card-title {
   display: grid;
   grid-template-columns: 1fr auto;
@@ -1006,12 +1002,6 @@ input, select {
   border-radius: 50%;
   background: #3b98c6;
   transform: translate(-50%, -50%);
-}
-
-.showcase-mark {
-  color: #a85572;
-  margin-right: 5px;
-  text-shadow: 0 1px 0 #fffaf2;
 }
 
 .film-link {

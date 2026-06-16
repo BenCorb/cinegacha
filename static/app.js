@@ -687,7 +687,7 @@ async function sellCard(itemId) {
 async function sendCard(event) {
   event.preventDefault();
   const form = event.currentTarget;
-  const itemId = form.dataset.sendForm;
+  const itemId = form.dataset.sendItemId;
   const data = Object.fromEntries(new FormData(form));
   try {
     const sent = await api("/api/trades", { method: "POST", body: JSON.stringify({ offerItemId: itemId, toUsername: data.toUsername }) });
@@ -719,7 +719,11 @@ async function toggleSeen(event) {
     state.view = currentView;
     await refresh({ shouldRender: false });
     state.view = currentView;
-    updateSeenButton(button, nextSeen);
+    document.querySelectorAll("[data-seen-id]").forEach((seenButton) => {
+      if (seenButton.dataset.seenId === button.dataset.seenId) {
+        updateSeenButton(seenButton, nextSeen);
+      }
+    });
   } catch (e) {
     showToast(e.message, "error");
     render();
@@ -876,13 +880,13 @@ function bindCardTilt() {
   });
 }
 
-function setPosterMenu(itemId, open, showSend = false) {
+function setPosterMenu(menuKey, open, showSend = false) {
   document.querySelectorAll("[data-card-menu]").forEach((menu) => {
-    const isTarget = menu.dataset.cardMenu === itemId;
+    const isTarget = menu.dataset.cardMenu === menuKey;
     menu.classList.toggle("is-open", Boolean(open && isTarget));
   });
   document.querySelectorAll("[data-send-form]").forEach((form) => {
-    const isTarget = form.dataset.sendForm === itemId;
+    const isTarget = form.dataset.sendForm === menuKey;
     form.classList.toggle("is-open", Boolean(open && showSend && isTarget));
     if (!open || !showSend || !isTarget) form.reset();
   });
@@ -912,11 +916,11 @@ function bindInteractiveCards() {
   document.querySelectorAll("[data-poster-menu]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      const itemId = button.dataset.posterMenu;
-      const wasOpen = state.activeCardMenu === itemId;
-      state.activeCardMenu = wasOpen ? null : itemId;
+      const menuKey = button.dataset.posterMenu;
+      const wasOpen = state.activeCardMenu === menuKey;
+      state.activeCardMenu = wasOpen ? null : menuKey;
       state.cardMenuMode = null;
-      setPosterMenu(itemId, !wasOpen);
+      setPosterMenu(menuKey, !wasOpen);
     });
   });
   document.querySelectorAll("[data-sell-id]").forEach((button) => {
@@ -928,9 +932,11 @@ function bindInteractiveCards() {
   document.querySelectorAll("[data-send-toggle]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
-      state.activeCardMenu = button.dataset.sendToggle;
-      state.cardMenuMode = state.cardMenuMode === "send" ? null : "send";
-      setPosterMenu(button.dataset.sendToggle, true, state.cardMenuMode === "send");
+      const menuKey = button.dataset.sendToggle;
+      const shouldOpen = state.activeCardMenu !== menuKey || state.cardMenuMode !== "send";
+      state.activeCardMenu = menuKey;
+      state.cardMenuMode = shouldOpen ? "send" : null;
+      setPosterMenu(menuKey, true, shouldOpen);
     });
   });
   document.querySelectorAll("[data-send-form]").forEach((form) => {

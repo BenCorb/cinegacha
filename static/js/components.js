@@ -8,10 +8,10 @@ import {
 // Posters
 // ---------------------------------------------------------------------------
 
-export function poster(item) {
+export function poster(item, menuKey = item.id) {
   if (!item.owned) return `<div class="placeholder">?</div>`;
   return `
-    <button class="poster poster-button" type="button" data-poster-menu="${item.id}" aria-label="Actions pour ${escapeHtml(item.name)}">
+    <button class="poster poster-button" type="button" data-poster-menu="${escapeHtml(menuKey)}" aria-label="Actions pour ${escapeHtml(item.name)}">
       <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async">
     </button>
   `;
@@ -102,7 +102,6 @@ export function keyModalHtml() {
 
 export function cardStatusMark(item) {
   const marks = [];
-  if (item.showcaseSlot) marks.push(`<span class="showcase-mark" aria-hidden="true">◆</span>`);
   if (item.favorite) marks.push(`<span class="favorite-mark" aria-label="Favori">★</span>`);
   if (item.watchlist) marks.push(`<span class="watchlist-mark" aria-label="Watchlist"></span>`);
   return marks.join("");
@@ -122,33 +121,34 @@ export function firstEmptyShowcaseSlot(items = state.collection) {
   return null;
 }
 
-export function collectionCardHtml(item, featured, readonly = false) {
+export function collectionCardHtml(item, featured, readonly = false, menuScope = "collection") {
   const title = item.owned && item.url
     ? `<a class="film-link" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.name)}</a>`
     : escapeHtml(item.name);
   const hasDupe = Number(item.count || 0) >= 2;
-  const isMenuOpen = state.activeCardMenu === item.id;
+  const menuKey = `${menuScope}:${item.id}`;
+  const isMenuOpen = state.activeCardMenu === menuKey;
   const isSendMode = isMenuOpen && state.cardMenuMode === "send";
   const sellPrice = SELL_PRICES[item.rarity] || 0;
   const isShowcased = Number(item.showcaseSlot || 0) > 0;
   const nextShowcaseSlot = firstEmptyShowcaseSlot();
   const canAddShowcase = isShowcased || nextShowcaseSlot !== null;
   return `
-    <article class="card rarity-${item.rarity} ${featured ? "featured" : ""} ${item.favorite ? "favorite" : ""} ${item.watchlist ? "watchlist" : ""} ${isShowcased ? "showcase" : ""} ${item.owned ? "" : "locked"}" data-card-id="${item.id}">
+    <article class="card rarity-${item.rarity} ${featured ? "featured" : ""} ${item.favorite ? "favorite" : ""} ${item.watchlist ? "watchlist" : ""} ${item.owned ? "" : "locked"}" data-card-id="${item.id}">
       <header class="card-title">
         <h3>${cardStatusMark(item)}${title}</h3>
         <span class="rarity ${item.rarity}">${item.rarity}</span>
       </header>
       <div class="card-action-area">
-        ${readonly ? readonlyPoster(item) : poster(item)}
+        ${readonly ? readonlyPoster(item) : poster(item, menuKey)}
         ${item.owned && !readonly ? `
-          <div class="poster-menu ${isMenuOpen ? "is-open" : ""}" data-card-menu="${item.id}">
+          <div class="poster-menu ${isMenuOpen ? "is-open" : ""}" data-card-menu="${escapeHtml(menuKey)}">
             <button type="button" class="favorite-action" data-favorite-id="${item.id}" data-favorite-next="${item.favorite ? "0" : "1"}">${item.favorite ? "Retirer favori" : "Favori"}</button>
             <button type="button" class="watchlist-action" data-watchlist-id="${item.id}" data-watchlist-next="${item.watchlist ? "0" : "1"}">${item.watchlist ? "Retirer watchlist" : "Watchlist"}</button>
             <button type="button" class="showcase-action" data-showcase-id="${item.id}" data-showcase-slot="${isShowcased ? "" : nextShowcaseSlot || ""}" ${canAddShowcase ? "" : "disabled"}>${isShowcased ? "Retirer vitrine" : "Ajouter vitrine"}</button>
             <button type="button" class="primary" data-sell-id="${item.id}" ${hasDupe ? "" : "disabled"}>Vendre (+${sellPrice}¥)</button>
-            <button type="button" class="blue" data-send-toggle="${item.id}" ${hasDupe ? "" : "disabled"}>Envoyer</button>
-            <form class="send-card-form ${isSendMode ? "is-open" : ""}" data-send-form="${item.id}">
+            <button type="button" class="blue" data-send-toggle="${escapeHtml(menuKey)}" ${hasDupe ? "" : "disabled"}>Envoyer</button>
+            <form class="send-card-form ${isSendMode ? "is-open" : ""}" data-send-form="${escapeHtml(menuKey)}" data-send-item-id="${item.id}">
               <input name="toUsername" placeholder="Pseudo" list="users-datalist" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true">
               <button type="submit" class="primary">OK</button>
             </form>
@@ -189,7 +189,7 @@ function showcaseSlotHtml(slot, item) {
   return `
     <div class="showcase-slot is-filled">
       <span class="showcase-slot-number">Emplacement ${slot}</span>
-      ${collectionCardHtml(item, false, true)}
+      ${collectionCardHtml(item, false, false, `showcase-${slot}`)}
       <div class="showcase-controls">
         <button type="button" class="ghost" data-showcase-move="${item.id}" data-showcase-slot="${slot - 1}" ${slot === 1 ? "disabled" : ""} aria-label="Déplacer ${escapeHtml(item.name)} vers la gauche">←</button>
         <button type="button" class="ghost" data-showcase-move="${item.id}" data-showcase-slot="${slot + 1}" ${slot === SHOWCASE_LIMIT ? "disabled" : ""} aria-label="Déplacer ${escapeHtml(item.name)} vers la droite">→</button>
