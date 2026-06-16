@@ -5,6 +5,7 @@ Toute la logique métier est dans game.py et db.py.
 """
 from __future__ import annotations
 
+import gzip
 import hmac
 import json
 import os
@@ -33,13 +34,13 @@ from game import (
     achievements_for_user,
     add_item,
     check_and_unlock_achievements,
-    collection_for,
     collection_summary,
     inventory_count,
     item_payload,
     leaderboard,
     next_full_hour,
     now,
+    owned_collection_for,
     pick_weighted_item,
     poster_svg,
     refill_user,
@@ -63,6 +64,8 @@ from db import (
 MAX_BODY = 64 * 1024
 ROLL_COUNTS = {1, 5, 10}
 RARITY_POWER = {"C": 0, "UC": 1, "R": 2, "UR": 3, "L": 4}
+GZIP_MIN_BYTES = 1024
+GZIP_STATIC_SUFFIXES = (".js", ".css", ".html", ".json", ".svg")
 
 
 def _unlock_achievements(conn: sqlite3.Connection, user: dict) -> list[dict]:
@@ -235,10 +238,17 @@ class Handler(SimpleHTTPRequestHandler):
             self.send_header("Cache-Control", "public, max-age=3600")
         super().end_headers()
 
+    def _accepts_gzip(self) -> bool:
+        return "gzip" in self.headers.get("Accept-Encoding", "")
+
     def send_json(self, payload: dict, status: HTTPStatus = HTTPStatus.OK) -> None:
         body = json.dumps(payload, ensure_ascii=True).encode("utf-8")
         self.send_response(status)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        if len(body) >= GZIP_MIN_BYTES and self._accepts_gzip():
+            body = gzip.compress(body, compresslevel=6)
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Vary", "Accept-Encoding")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
@@ -249,6 +259,39 @@ class Handler(SimpleHTTPRequestHandler):
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
         self.wfile.write(body)
+
+    def maybe_serve_gzip_static(self) -> bool:
+        """Sert un fichier texte statique compresse. Retourne True si gere ici.
+
+        Repli (return False) -> super().do_GET() pour Range et revalidation
+        conditionnelle (304), que le parent gere deja correctement.
+        """
+        if not self._accepts_gzip() or "Range" in self.headers:
+            return False
+        if self.headers.get("If-Modified-Since") or self.headers.get("If-None-Match"):
+            return False
+        fs_path = self.translate_path(self.path)
+        if not fs_path.endswith(GZIP_STATIC_SUFFIXES):
+            return False
+        try:
+            with open(fs_path, "rb") as handle:
+                raw = handle.read()
+            mtime = os.stat(fs_path).st_mtime
+        except OSError:
+            return False
+        if len(raw) < GZIP_MIN_BYTES:
+            return False
+        body = gzip.compress(raw, compresslevel=6)
+        self.send_response(HTTPStatus.OK)
+        self.send_header("Content-Type", self.guess_type(fs_path))
+        self.send_header("Content-Encoding", "gzip")
+        self.send_header("Vary", "Accept-Encoding")
+        self.send_header("Last-Modified", self.date_time_string(int(mtime)))
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(body)
+        return True
 
     # -----------------------------------------------------------------------
     # GET
@@ -262,6 +305,8 @@ class Handler(SimpleHTTPRequestHandler):
                 self.send_svg(poster_svg(parsed.path.rsplit("/", 1)[-1]))
                 return
             if not parsed.path.startswith("/api/"):
+                if self.maybe_serve_gzip_static():
+                    return
                 return super().do_GET()
 
             with db() as conn:
@@ -285,14 +330,12 @@ class Handler(SimpleHTTPRequestHandler):
                 user = require_user(self, conn)
 
                 if parsed.path == "/api/collection":
-                    owned = conn.execute(
-                        "SELECT COUNT(*) AS total FROM inventory WHERE user_id = ? AND count > 0",
-                        (user["id"],),
-                    ).fetchone()["total"]
+                    summary = collection_summary(conn, user["id"])
                     self.send_json({
-                        "items": collection_for(conn, user["id"]),
-                        "owned": owned,
-                        "total": len(ITEMS),
+                        "items": owned_collection_for(conn, user["id"]),
+                        "summary": summary,
+                        "owned": summary["owned"],
+                        "total": summary["total"],
                         **(user_payload(user) or {}),
                     })
                     return
@@ -321,7 +364,7 @@ class Handler(SimpleHTTPRequestHandler):
                         self.send_json({
                             "username": target["username"],
                             "summary": collection_summary(conn, target["id"]),
-                            "items": collection_for(conn, target["id"]),
+                            "items": owned_collection_for(conn, target["id"]),
                         })
                         return
 
@@ -566,7 +609,7 @@ class Handler(SimpleHTTPRequestHandler):
                     self.send_json({
                         "itemId": item_id,
                         "showcaseSlot": slot,
-                        "items": collection_for(conn, user["id"]),
+                        "items": owned_collection_for(conn, user["id"]),
                     })
                     return
 
