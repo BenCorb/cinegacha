@@ -157,11 +157,39 @@ export function publicCardHtml(item) {
 }
 
 export function resultHtml(result) {
+  const entries = Array.isArray(result?.items)
+    ? result.items
+    : result?.item
+      ? [{ item: result.item, isDuplicate: result.isDuplicate }]
+      : [];
+  const index = Math.min(state.resultIndex || 0, Math.max(entries.length - 1, 0));
+  const current = entries[index];
+  if (!current) return "";
+  const remaining = Math.max(0, entries.length - index - 1);
+  const stackBacks = entries
+    .slice(index + 1, index + 4)
+    .map((entry, i) => {
+      const offsets = [
+        ["5px", "5px", "-.35deg", ".96"],
+        ["9px", "9px", ".15deg", ".9"],
+        ["13px", "13px", ".45deg", ".84"],
+      ][i];
+      return `
+        <div class="result-stack-back rarity-${entry.item.rarity}" style="--stack-x:${offsets[0]};--stack-y:${offsets[1]};--stack-rotate:${offsets[2]};--stack-opacity:${offsets[3]}" aria-hidden="true"></div>
+      `;
+    })
+    .join("");
+  const duplicateText = current.isDuplicate
+    ? "Doublon ajoute au classeur."
+    : "Nouvelle entree dans le classeur.";
   return `
-    <div class="result-card">
-      <button class="close-result" id="closeResult" type="button" aria-label="Fermer la carte">×</button>
-      <div class="grid result-grid">${collectionCardHtml({ ...result.item, owned: true, count: result.item.count || 1 }, false)}</div>
-      <p>${result.isDuplicate ? "Doublon ajoute au classeur." : "Nouvelle entree dans le classeur."}</p>
+    <div class="result-card ${entries.length > 1 ? "is-stack" : ""}">
+      <button class="close-result" id="closeResult" type="button" aria-label="${remaining ? "Carte suivante" : "Fermer la carte"}">×</button>
+      <div class="result-stack-stage">
+        ${stackBacks}
+        <div class="grid result-grid">${collectionCardHtml({ ...current.item, owned: true, count: current.item.count || 1 }, false)}</div>
+      </div>
+      <p>${entries.length > 1 ? `<span class="result-progress">Carte ${index + 1}/${entries.length}</span>` : ""}${duplicateText}</p>
     </div>
   `;
 }

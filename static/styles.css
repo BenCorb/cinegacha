@@ -329,6 +329,8 @@ input, select {
   top: 36px;
   color: #ef5d50;
   font-weight: 900;
+  font-size: .82rem;
+  line-height: 1;
   border: 2px solid #ef5d50;
   border-radius: 50%;
   width: 54px;
@@ -336,6 +338,39 @@ input, select {
   display: grid;
   place-items: center;
   transform: rotate(-9deg);
+}
+
+.roll-count {
+  position: absolute;
+  right: 42px;
+  top: 36px;
+  width: 54px;
+  height: 54px;
+  padding: 0;
+  border: 3px solid #263249;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fffaf2;
+  color: #263249;
+  font-size: .92rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,.72), 0 4px 0 rgba(38,50,73,.16);
+}
+
+.roll-count:hover {
+  background: #abe4ff;
+}
+
+.roll-count:focus-visible {
+  outline: 4px solid #64c8f2;
+  outline-offset: 4px;
+}
+
+.roll-count:disabled {
+  cursor: not-allowed;
+  opacity: .72;
 }
 
 .handle {
@@ -587,6 +622,61 @@ input, select {
   z-index: 1;
 }
 
+.result-stack-stage {
+  position: relative;
+  isolation: isolate;
+}
+
+.result-card.is-stack .result-stack-stage {
+  padding: 0 18px 14px;
+}
+
+.result-stack-back {
+  --stack-bg-a: #eef2f6;
+  --stack-bg-b: #d9dee6;
+  position: absolute;
+  inset: 0;
+  width: 300px;
+  height: calc(100% - 14px);
+  margin: 0 auto;
+  z-index: 0;
+  border: 3px solid rgba(38,50,73,.88);
+  border-radius: 8px;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,.78), rgba(255,250,242,.5)),
+    linear-gradient(135deg, var(--stack-bg-a), var(--stack-bg-b));
+  box-shadow: inset 0 0 0 3px rgba(255,255,255,.62), 0 3px 0 rgba(38,50,73,.12);
+  opacity: var(--stack-opacity, .9);
+  pointer-events: none;
+  transform: translate(var(--stack-x, 6px), var(--stack-y, 6px)) rotate(var(--stack-rotate, 0deg));
+  transform-origin: 50% 80%;
+}
+
+.result-stack-back.rarity-C {
+  --stack-bg-a: #f0f3f7;
+  --stack-bg-b: #d7dde6;
+}
+
+.result-stack-back.rarity-UC {
+  --stack-bg-a: #e7ffe9;
+  --stack-bg-b: #b7f0c8;
+}
+
+.result-stack-back.rarity-R {
+  --stack-bg-a: #ecf9ff;
+  --stack-bg-b: #abe4ff;
+}
+
+.result-stack-back.rarity-UR {
+  --stack-bg-a: #f5edff;
+  --stack-bg-b: #d8c2ff;
+}
+
+.result-stack-back.rarity-L {
+  --stack-bg-a: #fff6bd;
+  --stack-bg-b: #ffe779;
+}
+
 .close-result {
   position: absolute;
   top: -10px;
@@ -602,11 +692,20 @@ input, select {
   font-size: 1.2rem;
   font-weight: 900;
   line-height: 1;
-  z-index: 4;
+  z-index: 6;
 }
 
 .result-grid {
   grid-template-columns: 300px;
+  position: relative;
+  z-index: 3;
+}
+
+.result-progress {
+  display: block;
+  color: var(--muted);
+  font-size: .78rem;
+  line-height: 1.2;
 }
 
 .opening {
@@ -1927,7 +2026,16 @@ input, select {
     top: 25px;
     width: 44px;
     height: 44px;
-    font-size: .82rem;
+    font-size: .68rem;
+  }
+
+  .view-gacha .roll-count {
+    right: 34px;
+    top: 25px;
+    width: 44px;
+    height: 44px;
+    font-size: .78rem;
+    border-width: 2px;
   }
 
   .view-gacha .handle {
@@ -1996,6 +2104,16 @@ input, select {
     grid-template-columns: minmax(0, 1fr);
     justify-items: center;
     gap: 0;
+  }
+
+  .view-gacha .result-card.is-stack .result-stack-stage {
+    padding: 0 12px 12px;
+  }
+
+  .view-gacha .result-stack-back {
+    width: min(100%, 304px);
+    height: calc(100% - 12px);
+    transform: translate(var(--stack-x, 6px), var(--stack-y, 6px)) rotate(var(--stack-rotate, 0deg));
   }
 
   .view-gacha .result-grid .card {
@@ -2070,6 +2188,12 @@ input, select {
   }
 
   .view-gacha .price {
+    top: 22px;
+    width: 40px;
+    height: 40px;
+  }
+
+  .view-gacha .roll-count {
     top: 22px;
     width: 40px;
     height: 40px;

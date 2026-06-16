@@ -58,6 +58,8 @@ from db import (
 # ---------------------------------------------------------------------------
 
 MAX_BODY = 64 * 1024
+ROLL_COUNTS = {1, 5, 10}
+RARITY_POWER = {"C": 0, "UC": 1, "R": 2, "UR": 3, "L": 4}
 
 
 def _unlock_achievements(conn: sqlite3.Connection, user: dict) -> list[dict]:
@@ -299,23 +301,37 @@ class Handler(SimpleHTTPRequestHandler):
 
                 # --- Tourner ---
                 if parsed.path == "/api/gacha/roll":
+                    try:
+                        roll_count = int(body.get("count", 1))
+                    except (TypeError, ValueError):
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "Nombre de tirages invalide.")
+                    if roll_count not in ROLL_COUNTS:
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "Nombre de tirages invalide.")
                     credits = int(user["credits"])
-                    if credits < ROLL_COST:
+                    total_cost = ROLL_COST * roll_count
+                    if credits < total_cost:
                         raise ApiError(HTTPStatus.PAYMENT_REQUIRED, "Credits insuffisants pour tourner la manette.")
-                    item = pick_weighted_item()
-                    roll_id = secrets.token_urlsafe(12)
-                    new_credits = credits - ROLL_COST
+                    items = [pick_weighted_item() for _ in range(roll_count)]
+                    roll_ids = [secrets.token_urlsafe(12) for _ in range(roll_count)]
+                    created_at = now()
+                    new_credits = credits - total_cost
                     conn.execute("UPDATE users SET credits = ? WHERE id = ?", (new_credits, user["id"]))
-                    conn.execute(
+                    conn.executemany(
                         "INSERT INTO rolls (id, user_id, item_id, opened, created_at) VALUES (?, ?, ?, 0, ?)",
-                        (roll_id, user["id"], item["id"], now()),
+                        [
+                            (roll_id, user["id"], item["id"], created_at)
+                            for roll_id, item in zip(roll_ids, items)
+                        ],
                     )
+                    top_item = max(items, key=lambda item: RARITY_POWER.get(item["rarity"], 0))
                     user["credits"] = new_credits
                     new_ach = _unlock_achievements(conn, user)
                     self.send_json({
-                        "rollId": roll_id,
-                        "rarity": item["rarity"],
-                        "capsule": CAPSULES.get(item["rarity"], CAPSULES["C"]),
+                        "rollId": roll_ids[0],
+                        "rollIds": roll_ids,
+                        "count": roll_count,
+                        "rarity": top_item["rarity"],
+                        "capsule": CAPSULES.get(top_item["rarity"], CAPSULES["C"]),
                         "newAchievements": new_ach,
                         **(user_payload(user) or {}),
                     }, HTTPStatus.CREATED)
@@ -323,21 +339,43 @@ class Handler(SimpleHTTPRequestHandler):
 
                 # --- Ouvrir une capsule ---
                 if parsed.path == "/api/gacha/open":
-                    roll_id = body.get("rollId", "")
-                    roll = conn.execute(
-                        "SELECT * FROM rolls WHERE id = ? AND user_id = ?", (roll_id, user["id"])
-                    ).fetchone()
-                    if not roll:
+                    body_roll_ids = body.get("rollIds")
+                    if isinstance(body_roll_ids, list):
+                        roll_ids = [str(roll_id) for roll_id in body_roll_ids if str(roll_id)]
+                    else:
+                        roll_id = body.get("rollId", "")
+                        roll_ids = [str(roll_id)] if roll_id else []
+                    if len(roll_ids) not in ROLL_COUNTS or len(set(roll_ids)) != len(roll_ids):
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "Capsule invalide.")
+
+                    placeholders = ",".join("?" for _ in roll_ids)
+                    rows = conn.execute(
+                        f"SELECT * FROM rolls WHERE id IN ({placeholders}) AND user_id = ?",
+                        (*roll_ids, user["id"]),
+                    ).fetchall()
+                    if len(rows) != len(roll_ids):
                         raise ApiError(HTTPStatus.NOT_FOUND, "Capsule introuvable.")
-                    if roll["opened"]:
+                    rows_by_id = {row["id"]: row for row in rows}
+                    rolls = [rows_by_id[roll_id] for roll_id in roll_ids]
+                    if any(roll["opened"] for roll in rolls):
                         raise ApiError(HTTPStatus.CONFLICT, "Cette capsule est deja ouverte.")
-                    before = inventory_count(conn, user["id"], roll["item_id"])
-                    add_item(conn, user["id"], roll["item_id"], 1)
-                    conn.execute("UPDATE rolls SET opened = 1 WHERE id = ?", (roll_id,))
+                    results = []
+                    for roll in rolls:
+                        before = inventory_count(conn, user["id"], roll["item_id"])
+                        add_item(conn, user["id"], roll["item_id"], 1)
+                        results.append({
+                            "item": item_payload(roll["item_id"], before + 1),
+                            "isDuplicate": before > 0,
+                        })
+                    conn.execute(
+                        f"UPDATE rolls SET opened = 1 WHERE id IN ({placeholders})",
+                        tuple(roll_ids),
+                    )
                     new_ach = _unlock_achievements(conn, user)
                     self.send_json({
-                        "item": item_payload(roll["item_id"], before + 1),
-                        "isDuplicate": before > 0,
+                        "items": results,
+                        "item": results[0]["item"],
+                        "isDuplicate": results[0]["isDuplicate"],
                         "newAchievements": new_ach,
                         **(user_payload(user) or {}),
                     })

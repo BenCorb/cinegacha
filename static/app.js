@@ -21,7 +21,43 @@ const $ = (selector) => document.querySelector(selector);
 let creditTimerId = null;
 let creditRefreshInFlight = false;
 let messageTimer = null;
+const ROLL_COUNTS = [1, 5, 10];
 let achievementToastTimer = null;
+
+function resultEntries(result = state.result) {
+  if (!result) return [];
+  if (Array.isArray(result.items)) return result.items;
+  if (result.item) return [result];
+  return [];
+}
+
+function syncLegacyResultFields(entries) {
+  if (!state.result || !entries.length) return;
+  state.result.item = entries[0].item;
+  state.result.isDuplicate = entries[0].isDuplicate;
+}
+
+function syncResultItems(collection) {
+  const entries = resultEntries();
+  if (!entries.length) return;
+  entries.forEach((entry) => {
+    const fresh = collection.find((item) => item.id === entry.item?.id);
+    if (fresh) entry.item = { ...fresh };
+  });
+  syncLegacyResultFields(entries);
+}
+
+function patchResultItems(itemId, patch) {
+  const entries = resultEntries();
+  entries.forEach((entry) => {
+    if (entry.item?.id === itemId) entry.item = { ...entry.item, ...patch };
+  });
+  syncLegacyResultFields(entries);
+}
+
+function rollPrice(count = state.rollCount) {
+  return `${(ROLL_COST * count).toLocaleString("fr-FR")}¥`;
+}
 
 // ---------------------------------------------------------------------------
 // Toast achievements
@@ -108,10 +144,7 @@ async function refresh({ shouldRender = true } = {}) {
     ];
     const [collection, users, leaderboardData, achievementsData] = await Promise.all(requests);
     state.collection = collection.items;
-    if (state.result?.item?.id) {
-      const fresh = state.collection.find((item) => item.id === state.result.item.id);
-      if (fresh) state.result.item = { ...fresh };
-    }
+    syncResultItems(state.collection);
     if (typeof collection.credits === "number") mergeUser(collection);
     state.users = users.users;
     if (leaderboardData)  state.leaderboard  = leaderboardData.leaderboard || [];
@@ -130,6 +163,7 @@ async function refresh({ shouldRender = true } = {}) {
       state.publicCollection = null;
       state.pendingRoll = null;
       state.result = null;
+      state.resultIndex = 0;
       state.message = "Session expiree apres reset. Reconnecte-toi ou cree un compte.";
       state.view = "login";
       render();
@@ -229,7 +263,9 @@ function requireLogin() {
 
 function renderGacha() {
   if (requireLogin()) return;
-  const canRoll = Number(state.user?.credits || 0) >= ROLL_COST;
+  if (!ROLL_COUNTS.includes(state.rollCount)) state.rollCount = 1;
+  const rollCount = state.rollCount;
+  const canRoll = Number(state.user?.credits || 0) >= ROLL_COST * rollCount;
   const balls = [
     ["#cfd6df","8%","22%",50],["#74d99f","22%","28%",54],["#55c7f5","38%","21%",58],
     ["#c8a8ff","55%","27%",48],["#ffd84f","72%","21%",52],["#74d99f","12%","48%",58],
@@ -251,7 +287,8 @@ function renderGacha() {
           </div>
           <div class="tank">${balls.map(([c, x, y, s]) => `<div class="ball" style="--c:${c};--x:${x};--y:${y};--s:${s}px"></div>`).join("")}</div>
           <div class="base">
-            <div class="price">100¥</div>
+            <div class="price">${rollPrice(rollCount)}</div>
+            <button class="roll-count" id="rollCount" type="button" aria-label="Changer le nombre de tirages" ${state.pendingRoll || state.rolling ? "disabled" : ""}>x${rollCount}</button>
             <button class="handle" id="roll" type="button" aria-label="Tourner la manette" ${state.pendingRoll || !canRoll || state.rolling ? "disabled" : ""}></button>
             <div class="chute"></div>
             ${state.pendingRoll ? `<button class="drop" id="open" type="button" aria-label="Ouvrir la capsule"></button>` : ""}
@@ -260,13 +297,20 @@ function renderGacha() {
       </section>
       <section class="panel reveal ${state.result ? "has-result" : "empty-reveal"} ${state.opening ? `opening impact-${state.openingRarity}` : ""}">
         ${state.opening ? burstHtml() : ""}
-        ${state.result ? resultHtml(state.result) : `<h1>Ta prochaine capsule attend.</h1><p>${canRoll ? "Chaque tirage coute 100¥." : "Pas assez de credits. Recharge automatique : 100¥ par heure."}</p>`}
+        ${state.result ? resultHtml(state.result) : `<h1>Ta prochaine capsule attend.</h1><p>${canRoll ? `Tirage x${rollCount} : ${rollPrice(rollCount)}.` : "Pas assez de credits. Recharge automatique : 100¥ par heure."}</p>`}
       </section>
     </div>
   `);
+  $("#rollCount")?.addEventListener("click", cycleRollCount);
   $("#roll").addEventListener("click", roll);
   $("#open")?.addEventListener("click", openCapsule);
   $("#closeResult")?.addEventListener("click", closeResult);
+}
+
+function cycleRollCount() {
+  const index = ROLL_COUNTS.indexOf(state.rollCount);
+  state.rollCount = ROLL_COUNTS[(index + 1) % ROLL_COUNTS.length];
+  render();
 }
 
 async function roll() {
@@ -276,7 +320,10 @@ async function roll() {
   if (btn) btn.disabled = true;
   $(".machine")?.classList.add("spinning");
   try {
-    state.pendingRoll = await api("/api/gacha/roll", { method: "POST", body: "{}" });
+    state.pendingRoll = await api("/api/gacha/roll", {
+      method: "POST",
+      body: JSON.stringify({ count: state.rollCount }),
+    });
     if (typeof state.pendingRoll.credits === "number") mergeUser(state.pendingRoll);
     handleNewAchievements(state.pendingRoll);
     state.rolling = false;
@@ -292,16 +339,19 @@ async function openCapsule() {
   const btn = $("#open");
   if (btn) btn.disabled = true;
   try {
+    const pendingRarity = state.pendingRoll?.rarity || "C";
+    const rollIds = state.pendingRoll?.rollIds || [state.pendingRoll.rollId];
     state.result = await api("/api/gacha/open", {
       method: "POST",
-      body: JSON.stringify({ rollId: state.pendingRoll.rollId }),
+      body: JSON.stringify({ rollIds }),
     });
+    state.resultIndex = 0;
     state.pendingRoll = null;
-    state.openingRarity = state.result.item.rarity || "C";
+    state.openingRarity = pendingRarity;
     state.opening = true;
     handleNewAchievements(state.result);
     await refresh({ shouldRender: false });
-    await preloadImage(state.result.item.image);
+    await Promise.all(resultEntries().map((entry) => preloadImage(entry.item?.image)));
     state.view = "gacha";
     render();
     setTimeout(() => {
@@ -319,7 +369,18 @@ async function openCapsule() {
 }
 
 function closeResult() {
+  const entries = resultEntries();
+  if (state.result && state.resultIndex < entries.length - 1) {
+    state.resultIndex += 1;
+    state.opening = false;
+    state.openingRarity = "C";
+    state.activeCardMenu = null;
+    state.cardMenuMode = null;
+    render();
+    return;
+  }
   state.result = null;
+  state.resultIndex = 0;
   state.opening = false;
   state.openingRarity = "C";
   state.activeCardMenu = null;
@@ -497,6 +558,9 @@ function renderLogin() {
       state.achievements = [];
       state.achievementQueue = [];
       state.publicCollection = null;
+      state.pendingRoll = null;
+      state.result = null;
+      state.resultIndex = 0;
       state.view = "login";
       render();
     });
@@ -563,6 +627,7 @@ async function resetCollection() {
     state.achievements = [];
     state.achievementQueue = [];
     state.result      = null;
+    state.resultIndex = 0;
     state.pendingRoll = null;
     state.message = "Collection reset.";
     await refresh();
@@ -625,7 +690,7 @@ async function toggleSeen(event) {
     handleNewAchievements(seenResult);
     const item = state.collection.find((entry) => entry.id === button.dataset.seenId);
     if (item) item.seen = nextSeen;
-    if (state.result?.item?.id === button.dataset.seenId) state.result.item.seen = nextSeen;
+    patchResultItems(button.dataset.seenId, { seen: nextSeen });
     state.view = currentView;
     await refresh({ shouldRender: false });
     state.view = currentView;
@@ -655,10 +720,7 @@ async function toggleFavorite(event) {
     handleNewAchievements(updated);
     const item = state.collection.find((entry) => entry.id === itemId);
     if (item) { item.favorite = updated.favorite; item.watchlist = updated.watchlist; }
-    if (state.result?.item?.id === itemId) {
-      state.result.item.favorite  = updated.favorite;
-      state.result.item.watchlist = updated.watchlist;
-    }
+    patchResultItems(itemId, { favorite: updated.favorite, watchlist: updated.watchlist });
     state.activeCardMenu = null;
     state.cardMenuMode = null;
     render();
@@ -681,10 +743,7 @@ async function toggleWatchlist(event) {
     handleNewAchievements(updated);
     const item = state.collection.find((entry) => entry.id === itemId);
     if (item) { item.favorite = updated.favorite; item.watchlist = updated.watchlist; }
-    if (state.result?.item?.id === itemId) {
-      state.result.item.favorite  = updated.favorite;
-      state.result.item.watchlist = updated.watchlist;
-    }
+    patchResultItems(itemId, { favorite: updated.favorite, watchlist: updated.watchlist });
     state.activeCardMenu = null;
     state.cardMenuMode = null;
     render();
