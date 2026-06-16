@@ -72,8 +72,10 @@ DATASET = load_dataset()
 ITEMS: dict[str, dict] = {item["id"]: item for item in DATASET["items"]}
 
 _POOLS_BY_RARITY: dict[str, list[dict]] = {}
+_RARITY_ITEM_IDS: dict[str, list[str]] = {}
 for _item in DATASET["items"]:
     _POOLS_BY_RARITY.setdefault(_item["rarity"], []).append(_item)
+    _RARITY_ITEM_IDS.setdefault(_item["rarity"], []).append(_item["id"])
 
 
 # ---------------------------------------------------------------------------
@@ -311,6 +313,143 @@ def collection_summary(conn: sqlite3.Connection, user_id: int) -> dict:
         "byRarity": by_rarity,
     }
 
+
+# ---------------------------------------------------------------------------
+# Achievements
+# ---------------------------------------------------------------------------
+
+ACHIEVEMENTS: dict[str, dict] = {
+    "first_roll":      {"name": "Premier tour",       "description": "Faire son premier tirage",            "reward": 20,  "category": "Tirages"},
+    "rolls_10":        {"name": "Accro",              "description": "Effectuer 10 tirages",                "reward": 30,  "category": "Tirages"},
+    "rolls_50":        {"name": "Régulier",           "description": "Effectuer 50 tirages",                "reward": 50,  "category": "Tirages"},
+    "rolls_200":       {"name": "Obsessionnel",       "description": "Effectuer 200 tirages",               "reward": 150, "category": "Tirages"},
+    "collection_10":   {"name": "Débutant",           "description": "Obtenir 10 cartes différentes",       "reward": 20,  "category": "Collection"},
+    "collection_50":   {"name": "Cinéphile",          "description": "Obtenir 50 cartes différentes",       "reward": 50,  "category": "Collection"},
+    "collection_100":  {"name": "Collectionneur",     "description": "Obtenir 100 cartes différentes",      "reward": 100, "category": "Collection"},
+    "collection_full": {"name": "Encyclopédiste",     "description": "Compléter toute la collection",       "reward": 500, "category": "Collection"},
+    "first_R":         {"name": "Coup de chance",     "description": "Obtenir sa première carte R",         "reward": 20,  "category": "Raretés"},
+    "first_UR":        {"name": "Ultra-rare",         "description": "Obtenir sa première carte UR",        "reward": 50,  "category": "Raretés"},
+    "first_L":         {"name": "Légendaire",         "description": "Obtenir sa première carte L",         "reward": 100, "category": "Raretés"},
+    "first_seen":      {"name": "Premier film",       "description": "Marquer un premier film comme vu",    "reward": 10,  "category": "Films vus"},
+    "seen_25":         {"name": "Cinéphile confirmé", "description": "Marquer 25 films comme vus",          "reward": 30,  "category": "Films vus"},
+    "seen_50":         {"name": "Critique",           "description": "Marquer 50 films comme vus",          "reward": 50,  "category": "Films vus"},
+    "first_trade":     {"name": "Généreux",           "description": "Envoyer une première carte",          "reward": 20,  "category": "Échanges"},
+    "trades_5":        {"name": "Commerçant",         "description": "Envoyer 5 cartes",                    "reward": 40,  "category": "Échanges"},
+    "first_sell":      {"name": "Première vente",     "description": "Vendre une première carte en double", "reward": 10,  "category": "Ventes"},
+    "sells_10":        {"name": "Liquidateur",        "description": "Vendre 10 cartes en double",          "reward": 30,  "category": "Ventes"},
+    "first_favorite":  {"name": "Premier favori",     "description": "Mettre une carte en favori",          "reward": 10,  "category": "Divers"},
+    "first_watchlist": {"name": "À voir",             "description": "Mettre une carte en watchlist",       "reward": 10,  "category": "Divers"},
+    "credits_5000":    {"name": "Plein les poches",   "description": "Atteindre 5 000¥",                   "reward": 30,  "category": "Divers"},
+}
+
+
+def _achievement_progress(conn: sqlite3.Connection, user_id: int, ach_id: str) -> tuple[int, int]:
+    def scalar(sql: str, params: tuple = ()) -> int:
+        return int(conn.execute(sql, params).fetchone()[0])
+
+    if ach_id == "first_roll":
+        return scalar("SELECT COUNT(*) FROM rolls WHERE user_id = ?", (user_id,)), 1
+    if ach_id == "rolls_10":
+        return scalar("SELECT COUNT(*) FROM rolls WHERE user_id = ?", (user_id,)), 10
+    if ach_id == "rolls_50":
+        return scalar("SELECT COUNT(*) FROM rolls WHERE user_id = ?", (user_id,)), 50
+    if ach_id == "rolls_200":
+        return scalar("SELECT COUNT(*) FROM rolls WHERE user_id = ?", (user_id,)), 200
+    if ach_id in ("collection_10", "collection_50", "collection_100", "collection_full"):
+        owned = scalar(
+            "SELECT COUNT(DISTINCT item_id) FROM inventory WHERE user_id = ? AND count > 0", (user_id,)
+        )
+        threshold = {"collection_10": 10, "collection_50": 50, "collection_100": 100, "collection_full": len(ITEMS)}[ach_id]
+        return owned, threshold
+    if ach_id in ("first_R", "first_UR", "first_L"):
+        rarity = {"first_R": "R", "first_UR": "UR", "first_L": "L"}[ach_id]
+        ids = _RARITY_ITEM_IDS.get(rarity, [])
+        if not ids:
+            return 0, 1
+        ph = ",".join("?" * len(ids))
+        return scalar(
+            f"SELECT COUNT(*) FROM rolls WHERE user_id = ? AND item_id IN ({ph})",
+            (user_id, *ids),
+        ), 1
+    if ach_id == "first_seen":
+        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND seen = 1", (user_id,)), 1
+    if ach_id == "seen_25":
+        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND seen = 1", (user_id,)), 25
+    if ach_id == "seen_50":
+        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND seen = 1", (user_id,)), 50
+    if ach_id == "first_trade":
+        return scalar("SELECT COUNT(*) FROM trades WHERE from_user_id = ?", (user_id,)), 1
+    if ach_id == "trades_5":
+        return scalar("SELECT COUNT(*) FROM trades WHERE from_user_id = ?", (user_id,)), 5
+    if ach_id == "first_sell":
+        return scalar("SELECT total_sells FROM users WHERE id = ?", (user_id,)), 1
+    if ach_id == "sells_10":
+        return scalar("SELECT total_sells FROM users WHERE id = ?", (user_id,)), 10
+    if ach_id == "first_favorite":
+        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND favorite = 1", (user_id,)), 1
+    if ach_id == "first_watchlist":
+        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND watchlist = 1", (user_id,)), 1
+    if ach_id == "credits_5000":
+        return scalar("SELECT credits FROM users WHERE id = ?", (user_id,)), 5000
+    return 0, 1
+
+
+def _check_achievement(conn: sqlite3.Connection, user_id: int, ach_id: str) -> bool:
+    current, target = _achievement_progress(conn, user_id, ach_id)
+    return target > 0 and current >= target
+
+
+def check_and_unlock_achievements(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    already = {
+        row["achievement_id"]
+        for row in conn.execute(
+            "SELECT achievement_id FROM user_achievements WHERE user_id = ?", (user_id,)
+        ).fetchall()
+    }
+    newly: list[dict] = []
+    for ach_id, ach in ACHIEVEMENTS.items():
+        if ach_id in already:
+            continue
+        if _check_achievement(conn, user_id, ach_id):
+            ts = now()
+            inserted = conn.execute(
+                "INSERT OR IGNORE INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)",
+                (user_id, ach_id, ts),
+            )
+            if inserted.rowcount == 0:
+                continue
+            conn.execute("UPDATE users SET credits = credits + ? WHERE id = ?", (ach["reward"], user_id))
+            newly.append({**ach, "id": ach_id, "unlockedAt": ts})
+    return newly
+
+
+def achievements_for_user(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    unlocked = {
+        row["achievement_id"]: row["unlocked_at"]
+        for row in conn.execute(
+            "SELECT achievement_id, unlocked_at FROM user_achievements WHERE user_id = ?", (user_id,)
+        ).fetchall()
+    }
+    result = []
+    for ach_id, ach in ACHIEVEMENTS.items():
+        current, target = _achievement_progress(conn, user_id, ach_id)
+        entry: dict = {
+            **ach,
+            "id": ach_id,
+            "unlocked": ach_id in unlocked,
+            "current": min(current, target),
+            "target": target,
+            "progress": round((min(current, target) / target) * 100) if target else 0,
+        }
+        if ach_id in unlocked:
+            entry["unlockedAt"] = unlocked[ach_id]
+        result.append(entry)
+    return result
+
+
+# ---------------------------------------------------------------------------
+# Leaderboard
+# ---------------------------------------------------------------------------
 
 _leaderboard_cache: tuple[float, list] | None = None
 _LEADERBOARD_TTL = 30

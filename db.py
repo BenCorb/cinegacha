@@ -125,13 +125,23 @@ def init_db() -> None:
             )
         conn.executescript(
             """
-            CREATE INDEX IF NOT EXISTS idx_inventory_user ON inventory(user_id);
-            CREATE INDEX IF NOT EXISTS idx_rolls_user     ON rolls(user_id);
-            CREATE INDEX IF NOT EXISTS idx_trades_from    ON trades(from_user_id);
-            CREATE INDEX IF NOT EXISTS idx_trades_to      ON trades(to_user_id);
-            CREATE INDEX IF NOT EXISTS idx_cstate_user    ON collection_state(user_id);
+            CREATE TABLE IF NOT EXISTS user_achievements (
+                user_id        INTEGER NOT NULL,
+                achievement_id TEXT    NOT NULL,
+                unlocked_at    INTEGER NOT NULL,
+                PRIMARY KEY (user_id, achievement_id),
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+            );
+            CREATE INDEX IF NOT EXISTS idx_inventory_user   ON inventory(user_id);
+            CREATE INDEX IF NOT EXISTS idx_rolls_user       ON rolls(user_id);
+            CREATE INDEX IF NOT EXISTS idx_trades_from      ON trades(from_user_id);
+            CREATE INDEX IF NOT EXISTS idx_trades_to        ON trades(to_user_id);
+            CREATE INDEX IF NOT EXISTS idx_cstate_user      ON collection_state(user_id);
+            CREATE INDEX IF NOT EXISTS idx_achievements_user ON user_achievements(user_id);
             """
         )
+        if "total_sells" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN total_sells INTEGER NOT NULL DEFAULT 0")
 
 
 # ---------------------------------------------------------------------------
