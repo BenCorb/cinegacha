@@ -27,6 +27,7 @@ from game import (
     REFILL_CAP,
     ROLL_COST,
     SELL_PRICES,
+    SHOWCASE_LIMIT,
     STARTING_CREDITS,
     STATIC_DIR,
     achievements_for_user,
@@ -69,6 +70,90 @@ def _unlock_achievements(conn: sqlite3.Connection, user: dict) -> list[dict]:
     if new_achievements:
         user["credits"] = int(user["credits"]) + sum(a["reward"] for a in new_achievements)
     return new_achievements
+
+
+def _showcase_slot(value) -> int | None:
+    if value is None:
+        return None
+    try:
+        slot = int(value)
+    except (TypeError, ValueError):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Emplacement de vitrine invalide.")
+    if slot < 1 or slot > SHOWCASE_LIMIT:
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Emplacement de vitrine invalide.")
+    return slot
+
+
+def _set_showcase_slot(
+    conn: sqlite3.Connection,
+    user_id: int,
+    item_id: str,
+    slot: int | None,
+) -> None:
+    state_row = conn.execute(
+        "SELECT showcase_slot FROM collection_state WHERE user_id = ? AND item_id = ?",
+        (user_id, item_id),
+    ).fetchone()
+    current_slot = (
+        int(state_row["showcase_slot"])
+        if state_row and state_row["showcase_slot"] is not None
+        else None
+    )
+
+    if slot is None:
+        conn.execute(
+            "UPDATE collection_state SET showcase_slot = NULL WHERE user_id = ? AND item_id = ?",
+            (user_id, item_id),
+        )
+        return
+
+    if current_slot == slot:
+        return
+
+    target_row = conn.execute(
+        "SELECT item_id FROM collection_state WHERE user_id = ? AND showcase_slot = ?",
+        (user_id, slot),
+    ).fetchone()
+
+    if current_slot is None:
+        showcased = conn.execute(
+            "SELECT COUNT(*) AS total FROM collection_state WHERE user_id = ? AND showcase_slot IS NOT NULL",
+            (user_id,),
+        ).fetchone()["total"]
+        if int(showcased) >= SHOWCASE_LIMIT:
+            raise ApiError(HTTPStatus.CONFLICT, "Ta vitrine est deja pleine.")
+        if target_row:
+            raise ApiError(HTTPStatus.CONFLICT, "Cet emplacement de vitrine est deja occupe.")
+        conn.execute(
+            """
+            INSERT INTO collection_state (user_id, item_id, showcase_slot)
+            VALUES (?, ?, ?)
+            ON CONFLICT(user_id, item_id) DO UPDATE SET showcase_slot = excluded.showcase_slot
+            """,
+            (user_id, item_id, slot),
+        )
+        return
+
+    if target_row and target_row["item_id"] != item_id:
+        target_item_id = target_row["item_id"]
+        conn.execute(
+            "UPDATE collection_state SET showcase_slot = NULL WHERE user_id = ? AND item_id IN (?, ?)",
+            (user_id, item_id, target_item_id),
+        )
+        conn.execute(
+            "UPDATE collection_state SET showcase_slot = ? WHERE user_id = ? AND item_id = ?",
+            (slot, user_id, item_id),
+        )
+        conn.execute(
+            "UPDATE collection_state SET showcase_slot = ? WHERE user_id = ? AND item_id = ?",
+            (current_slot, user_id, target_item_id),
+        )
+        return
+
+    conn.execute(
+        "UPDATE collection_state SET showcase_slot = ? WHERE user_id = ? AND item_id = ?",
+        (slot, user_id, item_id),
+    )
 
 
 def read_json_body(handler: SimpleHTTPRequestHandler) -> dict:
@@ -465,6 +550,24 @@ class Handler(SimpleHTTPRequestHandler):
                     )
                     new_ach = _unlock_achievements(conn, user)
                     self.send_json({"itemId": item_id, "seen": bool(seen), "newAchievements": new_ach})
+                    return
+
+                # --- Vitrine ---
+                if parsed.path == "/api/collection/showcase":
+                    item_id = body.get("itemId")
+                    if item_id not in ITEMS:
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "Film inconnu.")
+                    if "slot" not in body:
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "Emplacement de vitrine manquant.")
+                    slot = _showcase_slot(body.get("slot"))
+                    if slot is not None and inventory_count(conn, user["id"], item_id) < 1:
+                        raise ApiError(HTTPStatus.CONFLICT, "Tu dois obtenir ce film avant de le mettre en vitrine.")
+                    _set_showcase_slot(conn, user["id"], item_id, slot)
+                    self.send_json({
+                        "itemId": item_id,
+                        "showcaseSlot": slot,
+                        "items": collection_for(conn, user["id"]),
+                    })
                     return
 
                 # --- Favori ---

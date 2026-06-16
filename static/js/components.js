@@ -1,6 +1,6 @@
 import {
   state,
-  RARITIES, RARITY_RANK, SELL_PRICES,
+  RARITIES, RARITY_RANK, SELL_PRICES, SHOWCASE_LIMIT,
   creditTimerText, escapeHtml, formatCredits, statsHtml,
 } from "./state.js";
 
@@ -8,10 +8,10 @@ import {
 // Posters
 // ---------------------------------------------------------------------------
 
-export function poster(item) {
+export function poster(item, menuKey = item.id) {
   if (!item.owned) return `<div class="placeholder">?</div>`;
   return `
-    <button class="poster poster-button" type="button" data-poster-menu="${item.id}" aria-label="Actions pour ${escapeHtml(item.name)}">
+    <button class="poster poster-button" type="button" data-poster-menu="${escapeHtml(menuKey)}" aria-label="Actions pour ${escapeHtml(item.name)}">
       <img src="${escapeHtml(item.image)}" alt="${escapeHtml(item.name)}" loading="lazy" decoding="async">
     </button>
   `;
@@ -101,19 +101,38 @@ export function keyModalHtml() {
 // ---------------------------------------------------------------------------
 
 export function cardStatusMark(item) {
-  if (item.favorite) return `<span class="favorite-mark" aria-label="Favori">★</span>`;
-  if (item.watchlist) return `<span class="watchlist-mark" aria-label="Watchlist"></span>`;
-  return "";
+  const marks = [];
+  if (item.favorite) marks.push(`<span class="favorite-mark" aria-label="Favori">★</span>`);
+  if (item.watchlist) marks.push(`<span class="watchlist-mark" aria-label="Watchlist"></span>`);
+  return marks.join("");
 }
 
-export function collectionCardHtml(item, featured, readonly = false) {
+export function showcaseItems(items = state.collection) {
+  return [...items]
+    .filter((item) => item.owned && Number(item.showcaseSlot || 0) > 0)
+    .sort((a, b) => Number(a.showcaseSlot) - Number(b.showcaseSlot));
+}
+
+export function firstEmptyShowcaseSlot(items = state.collection) {
+  const used = new Set(showcaseItems(items).map((item) => Number(item.showcaseSlot)));
+  for (let slot = 1; slot <= SHOWCASE_LIMIT; slot += 1) {
+    if (!used.has(slot)) return slot;
+  }
+  return null;
+}
+
+export function collectionCardHtml(item, featured, readonly = false, menuScope = "collection") {
   const title = item.owned && item.url
     ? `<a class="film-link" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.name)}</a>`
     : escapeHtml(item.name);
   const hasDupe = Number(item.count || 0) >= 2;
-  const isMenuOpen = state.activeCardMenu === item.id;
+  const menuKey = `${menuScope}:${item.id}`;
+  const isMenuOpen = state.activeCardMenu === menuKey;
   const isSendMode = isMenuOpen && state.cardMenuMode === "send";
   const sellPrice = SELL_PRICES[item.rarity] || 0;
+  const isShowcased = Number(item.showcaseSlot || 0) > 0;
+  const nextShowcaseSlot = firstEmptyShowcaseSlot();
+  const canAddShowcase = isShowcased || nextShowcaseSlot !== null;
   return `
     <article class="card rarity-${item.rarity} ${featured ? "featured" : ""} ${item.favorite ? "favorite" : ""} ${item.watchlist ? "watchlist" : ""} ${item.owned ? "" : "locked"}" data-card-id="${item.id}">
       <header class="card-title">
@@ -121,18 +140,20 @@ export function collectionCardHtml(item, featured, readonly = false) {
         <span class="rarity ${item.rarity}">${item.rarity}</span>
       </header>
       <div class="card-action-area">
-        ${readonly ? readonlyPoster(item) : poster(item)}
+        ${readonly ? readonlyPoster(item) : poster(item, menuKey)}
         ${item.owned && !readonly ? `
-          <div class="poster-menu ${isMenuOpen ? "is-open" : ""}" data-card-menu="${item.id}">
+          <div class="poster-menu ${isMenuOpen ? "is-open" : ""}" data-card-menu="${escapeHtml(menuKey)}">
             <button type="button" class="favorite-action" data-favorite-id="${item.id}" data-favorite-next="${item.favorite ? "0" : "1"}">${item.favorite ? "Retirer favori" : "Favori"}</button>
             <button type="button" class="watchlist-action" data-watchlist-id="${item.id}" data-watchlist-next="${item.watchlist ? "0" : "1"}">${item.watchlist ? "Retirer watchlist" : "Watchlist"}</button>
+            <button type="button" class="showcase-action" data-showcase-id="${item.id}" data-showcase-slot="${isShowcased ? "" : nextShowcaseSlot || ""}" ${canAddShowcase ? "" : "disabled"}>${isShowcased ? "Retirer vitrine" : "Ajouter vitrine"}</button>
             <button type="button" class="primary" data-sell-id="${item.id}" ${hasDupe ? "" : "disabled"}>Vendre (+${sellPrice}¥)</button>
-            <button type="button" class="blue" data-send-toggle="${item.id}" ${hasDupe ? "" : "disabled"}>Envoyer</button>
-            <form class="send-card-form ${isSendMode ? "is-open" : ""}" data-send-form="${item.id}">
+            <button type="button" class="blue" data-send-toggle="${escapeHtml(menuKey)}" ${hasDupe ? "" : "disabled"}>Envoyer</button>
+            <form class="send-card-form ${isSendMode ? "is-open" : ""}" data-send-form="${escapeHtml(menuKey)}" data-send-item-id="${item.id}">
               <input name="toUsername" placeholder="Pseudo" list="users-datalist" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true">
               <button type="submit" class="primary">OK</button>
             </form>
             ${hasDupe ? "" : `<p class="menu-hint">Action disponible avec un doublon.</p>`}
+            ${!isShowcased && !canAddShowcase ? `<p class="menu-hint">Vitrine pleine.</p>` : ""}
           </div>
         ` : ""}
       </div>
@@ -154,6 +175,65 @@ export function cardHtml(item) {
 
 export function publicCardHtml(item) {
   return collectionCardHtml(item, false, true);
+}
+
+function showcaseSlotHtml(slot, item) {
+  if (!item) {
+    return `
+      <div class="showcase-slot is-empty">
+        <span class="showcase-slot-number">Emplacement ${slot}</span>
+        <div class="showcase-empty">Libre</div>
+      </div>
+    `;
+  }
+  return `
+    <div class="showcase-slot is-filled">
+      <span class="showcase-slot-number">Emplacement ${slot}</span>
+      ${collectionCardHtml(item, false, false, `showcase-${slot}`)}
+      <div class="showcase-controls">
+        <button type="button" class="ghost" data-showcase-move="${item.id}" data-showcase-slot="${slot - 1}" ${slot === 1 ? "disabled" : ""} aria-label="Déplacer ${escapeHtml(item.name)} vers la gauche">←</button>
+        <button type="button" class="ghost" data-showcase-move="${item.id}" data-showcase-slot="${slot + 1}" ${slot === SHOWCASE_LIMIT ? "disabled" : ""} aria-label="Déplacer ${escapeHtml(item.name)} vers la droite">→</button>
+        <button type="button" class="ghost" data-showcase-remove="${item.id}">Retirer</button>
+      </div>
+    </div>
+  `;
+}
+
+export function showcaseEditorHtml() {
+  const showcased = new Map(showcaseItems().map((item) => [Number(item.showcaseSlot), item]));
+  const count = showcased.size;
+  return `
+    <section class="showcase-editor" aria-label="Ma vitrine">
+      <div class="showcase-heading">
+        <div>
+          <p class="eyebrow">Ma vitrine</p>
+          <h2>${count}/${SHOWCASE_LIMIT} cartes</h2>
+        </div>
+        <span class="showcase-status">${count >= SHOWCASE_LIMIT ? "Pleine" : `${SHOWCASE_LIMIT - count} libre${SHOWCASE_LIMIT - count > 1 ? "s" : ""}`}</span>
+      </div>
+      <div class="showcase-slots">
+        ${Array.from({ length: SHOWCASE_LIMIT }, (_, index) => showcaseSlotHtml(index + 1, showcased.get(index + 1))).join("")}
+      </div>
+    </section>
+  `;
+}
+
+function publicShowcaseHtml(profile) {
+  const items = showcaseItems(profile.items || []);
+  if (!items.length) return "";
+  return `
+    <section class="public-showcase" aria-label="Vitrine de ${escapeHtml(profile.username)}">
+      <div class="showcase-heading">
+        <div>
+          <p class="eyebrow">Vitrine</p>
+          <h3>${items.length}/${SHOWCASE_LIMIT} cartes</h3>
+        </div>
+      </div>
+      <div class="public-showcase-grid">
+        ${items.map(publicCardHtml).join("")}
+      </div>
+    </section>
+  `;
 }
 
 export function resultHtml(result) {
@@ -348,6 +428,7 @@ export function publicCollectionHtml(profile) {
     <div class="progress-line">
       <span style="--progress:${Number(summary.percent || 0)}%"></span>
     </div>
+    ${publicShowcaseHtml(profile)}
     <div class="filters public-filters">
       <input id="publicQ" placeholder="Rechercher un film" value="${escapeHtml(state.publicFilters.q)}">
       <select id="publicRarity">
