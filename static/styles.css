@@ -579,6 +579,10 @@ input, select {
   background: #e9fbff;
 }
 
+.poster-menu .showcase-action {
+  background: #fff0dc;
+}
+
 .send-card-form {
   display: none;
   grid-template-columns: 1fr auto;
@@ -966,6 +970,8 @@ input, select {
   font-size: .88rem;
   line-height: 1.15;
   margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
 }
 
 .favorite-mark {
@@ -1209,6 +1215,123 @@ input, select {
 
 .mini-progress {
   height: 8px;
+}
+
+.showcase-editor,
+.public-showcase {
+  border: 2px solid rgba(38,50,73,.16);
+  border-radius: 8px;
+  background: linear-gradient(135deg, rgba(255,246,201,.62), rgba(255,255,255,.72));
+  box-shadow: 0 4px 0 rgba(38,50,73,.1);
+  padding: 12px;
+  margin-bottom: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.showcase-heading {
+  display: flex;
+  justify-content: space-between;
+  align-items: start;
+  gap: 12px;
+}
+
+.showcase-heading h2,
+.showcase-heading h3 {
+  margin: 0;
+  font-size: 1.05rem;
+}
+
+.showcase-status {
+  border: 2px solid rgba(38,50,73,.18);
+  border-radius: 999px;
+  background: white;
+  padding: .28rem .58rem;
+  color: var(--muted);
+  font-size: .76rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.showcase-slots {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.showcase-slot {
+  flex: 0 1 324px;
+  width: min(100%, 324px);
+  min-width: 0;
+  border: 2px solid rgba(38,50,73,.16);
+  border-radius: 8px;
+  background: rgba(255,255,255,.72);
+  padding: 9px;
+  display: grid;
+  gap: 8px;
+}
+
+.showcase-slot.is-empty {
+  background: rgba(255,255,255,.42);
+}
+
+.showcase-slot-number {
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 900;
+}
+
+.showcase-empty {
+  width: min(100%, 300px);
+  min-height: 500px;
+  border: 2px dashed rgba(38,50,73,.18);
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  justify-self: center;
+  color: var(--muted);
+  font-weight: 900;
+}
+
+.showcase-slot .card {
+  width: min(100%, 300px);
+  max-width: 300px;
+  justify-self: center;
+}
+
+.showcase-controls {
+  width: min(100%, 300px);
+  justify-self: center;
+  display: grid;
+  grid-template-columns: 34px 34px 1fr;
+  gap: 6px;
+}
+
+.showcase-controls button {
+  min-width: 0;
+  padding: .34rem .28rem;
+  font-size: .76rem;
+  box-shadow: none;
+}
+
+.public-showcase {
+  margin: 0;
+}
+
+.public-showcase-grid {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: flex-start;
+  gap: 18px;
+}
+
+.public-showcase-grid .card {
+  flex: 0 1 300px;
+  width: min(100%, 300px);
+  max-width: 300px;
 }
 
 .form { grid-template-columns: 1fr 1fr auto; align-items: end; }
@@ -1517,14 +1640,6 @@ input, select {
   cursor: default;
 }
 
-.message {
-  border: 2px dashed #f0bccb;
-  background: rgba(255,255,255,.65);
-  border-radius: 8px;
-  padding: 12px;
-  color: #85445a;
-}
-
 .keybox {
   overflow-wrap: anywhere;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
@@ -1591,6 +1706,85 @@ input, select {
 }
 
 
+/* ===== Toasts ===== */
+
+.app-toast {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  z-index: 3000;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  border: 3px solid #263249;
+  border-radius: 10px;
+  background: linear-gradient(135deg, rgba(255,255,255,.98), rgba(232,248,255,.96));
+  box-shadow: 0 6px 0 rgba(38,50,73,.18);
+  padding: 12px 14px;
+  max-width: min(340px, calc(100vw - 40px));
+  animation: toast-in .3s cubic-bezier(.17,.9,.25,1.25) both;
+}
+
+.app-toast-success {
+  background: linear-gradient(135deg, rgba(231,255,233,.98), rgba(255,255,255,.96));
+}
+
+.app-toast-error {
+  background: linear-gradient(135deg, rgba(255,236,242,.98), rgba(255,255,255,.96));
+}
+
+.app-toast.is-dismissing {
+  animation: toast-out .26s ease-in forwards;
+}
+
+.app-toast-body {
+  display: grid;
+  gap: 2px;
+  flex: 1;
+  min-width: 0;
+}
+
+.app-toast-label {
+  color: var(--muted);
+  font-size: .68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+}
+
+.app-toast-error .app-toast-label {
+  color: #b64b62;
+}
+
+.app-toast-success .app-toast-label {
+  color: #3b8a59;
+}
+
+.app-toast strong {
+  color: var(--ink);
+  font-size: .9rem;
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+.app-toast-close,
+.achievement-toast-close {
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  padding: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: rgba(255,255,255,.82);
+  font-size: 1.1rem;
+  font-weight: 900;
+  line-height: 1;
+  box-shadow: none;
+  border-width: 2px;
+}
+
+
 /* ===== Achievements ===== */
 
 .achievement-toast {
@@ -1650,22 +1844,6 @@ input, select {
   color: #7a6a30;
   font-size: .82rem;
   font-weight: 900;
-}
-
-.achievement-toast-close {
-  width: 28px;
-  height: 28px;
-  min-width: 28px;
-  padding: 0;
-  border-radius: 50%;
-  display: grid;
-  place-items: center;
-  background: rgba(255,255,255,.82);
-  font-size: 1.1rem;
-  font-weight: 900;
-  line-height: 1;
-  box-shadow: none;
-  border-width: 2px;
 }
 
 .achievements-grid {
@@ -1891,6 +2069,21 @@ input, select {
     font-size: .8rem;
   }
 
+  .showcase-slots,
+  .public-showcase-grid {
+    align-items: center;
+  }
+
+  .showcase-slot {
+    flex: 0 0 auto;
+    width: min(100%, 324px);
+  }
+
+  .public-showcase-grid .card {
+    flex: 0 0 auto;
+    width: min(100%, 300px);
+  }
+
   .shell:not(.view-gacha) > .panel,
   .shell:not(.view-gacha) > .stack,
   .shell:not(.view-gacha) > .leaderboard-layout {
@@ -1930,17 +2123,6 @@ input, select {
 
   .view-gacha .wallet {
     margin: 0;
-  }
-
-  .view-gacha > .message {
-    position: fixed;
-    left: 10px;
-    right: 10px;
-    top: 86px;
-    z-index: 1100;
-    padding: 9px 10px;
-    font-size: .86rem;
-    box-shadow: 0 5px 0 rgba(38,50,73,.12);
   }
 
   .view-gacha .layout {

@@ -25,7 +25,6 @@ export const state = {
   activeCardMenu: null,
   cardMenuMode: null,
   keyModal: null,
-  message: "",
   filters: { q: "", rarity: "all", owned: "all" },
   publicFilters: { q: "", rarity: "all", owned: "all" },
   release: {
@@ -40,6 +39,7 @@ export const state = {
 
 export const ROLL_COST   = 100;
 export const SELL_PRICES = { C: 20, UC: 30, R: 50, UR: 100, L: 150 };
+export const SHOWCASE_LIMIT = 3;
 export const RARITIES    = ["C", "UC", "R", "UR", "L"];
 export const RARITY_RANK = { L: 0, UR: 1, R: 2, UC: 3, C: 4 };
 export const preloadedImages = new Set();

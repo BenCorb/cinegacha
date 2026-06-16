@@ -18,6 +18,7 @@ from game import (
     ApiError,
     DATA_DIR,
     DB_PATH,
+    SHOWCASE_LIMIT,
     STARTING_CREDITS,
     now,
     refill_user,
@@ -95,6 +96,7 @@ def init_db() -> None:
                 seen INTEGER NOT NULL DEFAULT 0,
                 favorite INTEGER NOT NULL DEFAULT 0,
                 watchlist INTEGER NOT NULL DEFAULT 0,
+                showcase_slot INTEGER,
                 PRIMARY KEY (user_id, item_id),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
@@ -123,6 +125,31 @@ def init_db() -> None:
             conn.execute(
                 "ALTER TABLE collection_state ADD COLUMN watchlist INTEGER NOT NULL DEFAULT 0"
             )
+        if "showcase_slot" not in cs_cols:
+            conn.execute("ALTER TABLE collection_state ADD COLUMN showcase_slot INTEGER")
+        conn.execute(
+            """
+            UPDATE collection_state
+            SET showcase_slot = NULL
+            WHERE showcase_slot IS NOT NULL
+              AND (showcase_slot < 1 OR showcase_slot > ?)
+            """,
+            (SHOWCASE_LIMIT,),
+        )
+        conn.execute(
+            """
+            UPDATE collection_state
+            SET showcase_slot = NULL
+            WHERE showcase_slot IS NOT NULL
+              AND NOT EXISTS (
+                SELECT 1
+                FROM inventory
+                WHERE inventory.user_id = collection_state.user_id
+                  AND inventory.item_id = collection_state.item_id
+                  AND inventory.count > 0
+              )
+            """
+        )
         conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS user_achievements (
@@ -138,6 +165,9 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_trades_to        ON trades(to_user_id);
             CREATE INDEX IF NOT EXISTS idx_cstate_user      ON collection_state(user_id);
             CREATE INDEX IF NOT EXISTS idx_achievements_user ON user_achievements(user_id);
+            CREATE UNIQUE INDEX IF NOT EXISTS idx_cstate_showcase_slot
+                ON collection_state(user_id, showcase_slot)
+                WHERE showcase_slot IS NOT NULL;
             """
         )
         if "total_sells" not in user_cols:
