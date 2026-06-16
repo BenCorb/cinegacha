@@ -11,6 +11,8 @@ import os
 import secrets
 import socket
 import sqlite3
+import sys
+import threading
 from http import HTTPStatus
 from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from urllib.parse import unquote, urlparse
@@ -100,6 +102,21 @@ def lan_addresses(port: int) -> list[str]:
     except OSError:
         pass
     return [f"http://{ip}:{port}" for ip in sorted(addresses)]
+
+
+def start_terminal_commands(server: ThreadingHTTPServer) -> None:
+    if not sys.stdin or not sys.stdin.isatty():
+        return
+
+    def listen() -> None:
+        for line in sys.stdin:
+            if line.strip().lower() == "exit":
+                print("Commande exit recue, arret du serveur...")
+                server.shutdown()
+                return
+
+    thread = threading.Thread(target=listen, name="terminal-commands", daemon=True)
+    thread.start()
 
 
 # ---------------------------------------------------------------------------
@@ -560,4 +577,11 @@ if __name__ == "__main__":
     print(f"CinéGacha écoute sur {host}:{port}")
     for url in lan_addresses(port):
         print(f"  {url}")
-    ThreadingHTTPServer((host, port), Handler).serve_forever()
+    with ThreadingHTTPServer((host, port), Handler) as server:
+        start_terminal_commands(server)
+        if sys.stdin and sys.stdin.isatty():
+            print("Tape 'exit' puis Entrée pour arrêter le serveur.")
+        try:
+            server.serve_forever()
+        except KeyboardInterrupt:
+            print("\nArret du serveur...")
