@@ -372,6 +372,8 @@ ACHIEVEMENT_METRICS = {
     "watchlist",
     "credits",
     "showcase",
+    "max_copies",
+    "trades_received",
 }
 
 
@@ -467,25 +469,31 @@ def _user_metrics(conn: sqlite3.Connection, user_id: int) -> dict:
         if item:
             rarity_rolls[item["rarity"]] = rarity_rolls.get(item["rarity"], 0) + n
 
-    distinct_owned = int(conn.execute(
-        "SELECT COUNT(DISTINCT item_id) FROM inventory WHERE user_id = ? AND count > 0",
+    inv = conn.execute(
+        "SELECT COUNT(DISTINCT item_id) AS distinct_owned, COALESCE(MAX(count), 0) AS max_copies "
+        "FROM inventory WHERE user_id = ? AND count > 0",
         (user_id,),
-    ).fetchone()[0])
+    ).fetchone()
     trades_sent = int(conn.execute(
         "SELECT COUNT(*) FROM trades WHERE from_user_id = ?", (user_id,)
     ).fetchone()[0])
+    trades_received = int(conn.execute(
+        "SELECT COUNT(*) FROM trades WHERE to_user_id = ?", (user_id,)
+    ).fetchone()[0])
 
     return {
-        "rolls":       total_rolls,
-        "collection":  distinct_owned,
-        "seen":        int(cs["seen"]) if cs else 0,
-        "favorites":   int(cs["favorites"]) if cs else 0,
-        "watchlist":   int(cs["watchlist"]) if cs else 0,
-        "showcase":    int(cs["showcase"]) if cs else 0,
-        "trades_sent": trades_sent,
-        "sells":       int(urow["total_sells"]) if urow else 0,
-        "credits":     int(urow["credits"]) if urow else 0,
-        "rarity_rolls": rarity_rolls,
+        "rolls":           total_rolls,
+        "collection":      int(inv["distinct_owned"]) if inv else 0,
+        "max_copies":      int(inv["max_copies"]) if inv else 0,
+        "seen":            int(cs["seen"]) if cs else 0,
+        "favorites":       int(cs["favorites"]) if cs else 0,
+        "watchlist":       int(cs["watchlist"]) if cs else 0,
+        "showcase":        int(cs["showcase"]) if cs else 0,
+        "trades_sent":     trades_sent,
+        "trades_received": trades_received,
+        "sells":           int(urow["total_sells"]) if urow else 0,
+        "credits":         int(urow["credits"]) if urow else 0,
+        "rarity_rolls":    rarity_rolls,
     }
 
 

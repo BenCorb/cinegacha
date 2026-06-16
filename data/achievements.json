@@ -166,6 +166,16 @@
       "target": 1
     },
     {
+      "id": "L_3",
+      "name": "Chasseur de légendes",
+      "description": "Obtenir 3 cartes Légendaires",
+      "reward": 200,
+      "category": "Raretés",
+      "metric": "rarity_roll",
+      "rarity": "L",
+      "target": 3
+    },
+    {
       "id": "first_seen",
       "name": "Premier film",
       "description": "Marquer un premier film comme vu",
@@ -292,6 +302,15 @@
       "target": 100
     },
     {
+      "id": "first_received",
+      "name": "Cadeau surprise",
+      "description": "Recevoir une carte d'un autre joueur",
+      "reward": 30,
+      "category": "Échanges",
+      "metric": "trades_received",
+      "target": 1
+    },
+    {
       "id": "first_sell",
       "name": "Première vente",
       "description": "Vendre une première carte en double",
@@ -373,6 +392,15 @@
       "target": 1
     },
     {
+      "id": "favorites_10",
+      "name": "Cœur de cinéphile",
+      "description": "Mettre 10 films en favori",
+      "reward": 40,
+      "category": "Divers",
+      "metric": "favorites",
+      "target": 10
+    },
+    {
       "id": "first_watchlist",
       "name": "À voir",
       "description": "Mettre une carte en watchlist",
@@ -380,6 +408,15 @@
       "category": "Divers",
       "metric": "watchlist",
       "target": 1
+    },
+    {
+      "id": "watchlist_10",
+      "name": "Programme chargé",
+      "description": "Ajouter 10 films à la watchlist",
+      "reward": 40,
+      "category": "Divers",
+      "metric": "watchlist",
+      "target": 10
     },
     {
       "id": "credits_5000",
@@ -398,6 +435,24 @@
       "category": "Divers",
       "metric": "showcase",
       "target": 1
+    },
+    {
+      "id": "showcase_3",
+      "name": "Galerie complète",
+      "description": "Remplir les trois emplacements de la vitrine",
+      "reward": 60,
+      "category": "Divers",
+      "metric": "showcase",
+      "target": 3
+    },
+    {
+      "id": "copies_5",
+      "name": "Quintuplés",
+      "description": "Posséder 5 exemplaires d'un même film",
+      "reward": 60,
+      "category": "Divers",
+      "metric": "max_copies",
+      "target": 5
     }
   ]
 }

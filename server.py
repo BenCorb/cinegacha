@@ -703,6 +703,11 @@ class Handler(SimpleHTTPRequestHandler):
                     )
                     row = conn.execute("SELECT * FROM trades WHERE id = ?", (trade_id,)).fetchone()
                     new_ach = _unlock_achievements(conn, user)
+                    # Le destinataire ne fait pas d'action ici : on verifie ses succes pour
+                    # debloquer "Cadeau surprise" et tout succes declenche par la carte recue
+                    # (collection, max_copies...). Credits/deblocage cote serveur, visibles a
+                    # son prochain rafraichissement.
+                    check_and_unlock_achievements(conn, to_user["id"])
                     self.send_json({
                         "trade": trade_payload(conn, row),
                         "newAchievements": new_ach,

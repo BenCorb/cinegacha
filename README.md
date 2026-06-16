@@ -98,7 +98,8 @@ et une metric de progression :
 ```
 
 Metrics disponibles : `rolls`, `collection`, `rarity_roll`, `seen`,
-`trades_sent`, `sells`, `favorites`, `watchlist`, `credits`, `showcase`.
+`trades_sent`, `trades_received`, `sells`, `favorites`, `watchlist`, `credits`,
+`showcase`, `max_copies`.
 Pour `rarity_roll`, ajouter `rarity` avec `C`, `UC`, `R`, `UR` ou `L`.
 Pour viser toute la collection, utiliser `"target": "dataset_total"`.
 
