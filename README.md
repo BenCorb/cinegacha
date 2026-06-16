@@ -79,6 +79,29 @@ Pour les posters, creer une cle TMDb puis lancer le script avec la variable :
 TMDB_API_KEY=ta_cle python3 scripts/manage_database.py
 ```
 
+## Succès
+
+Les objectifs des succes vivent dans `data/achievements.json`.
+Chaque entree garde un `id` stable, les textes affiches, la recompense en credits
+et une metric de progression :
+
+```json
+{
+  "id": "rolls_10",
+  "name": "Accro",
+  "description": "Effectuer 10 tirages",
+  "reward": 30,
+  "category": "Tirages",
+  "metric": "rolls",
+  "target": 10
+}
+```
+
+Metrics disponibles : `rolls`, `collection`, `rarity_roll`, `seen`,
+`trades_sent`, `sells`, `favorites`, `watchlist`, `credits`.
+Pour `rarity_roll`, ajouter `rarity` avec `C`, `UC`, `R`, `UR` ou `L`.
+Pour viser toute la collection, utiliser `"target": "dataset_total"`.
+
 ## Version et changelog
 
 La version affichee dans l'app et le changelog vivent dans `static/version.json`.

@@ -364,6 +364,12 @@ function achievementRowHtml(ach) {
   `;
 }
 
+function visibleAchievementsForCategory(category, achievements) {
+  if (category.toLowerCase() === "divers") return achievements;
+  const nextLocked = achievements.find((ach) => !ach.unlocked);
+  return achievements.filter((ach) => ach.unlocked || ach === nextLocked);
+}
+
 export function achievementsViewHtml() {
   const achs = state.achievements;
   const total = achs.length;
@@ -377,7 +383,7 @@ export function achievementsViewHtml() {
   }
 
   const categoriesHtml = categories.map((cat) => {
-    const items = achs.filter((a) => a.category === cat);
+    const items = visibleAchievementsForCategory(cat, achs.filter((a) => a.category === cat));
     return `
       <div class="achievement-category">
         <h3 class="achievement-category-title">${escapeHtml(cat)}</h3>
