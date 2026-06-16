@@ -8,6 +8,7 @@ export const state = {
   dataset: null,
   dropRates: null,
   collection: [],
+  collectionSummary: null,
   users: [],
   trades: [],
   leaderboard: [],

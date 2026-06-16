@@ -5,6 +5,7 @@ Importe depuis game.py — pas de dépendances HTTP.
 """
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import hmac
 import sqlite3
@@ -13,6 +14,7 @@ import time
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler
 from pathlib import Path
+from queue import Empty, Full, Queue
 
 from game import (
     ApiError,
@@ -31,16 +33,46 @@ BACKUP_OFFSET_SECONDS = 45 * 60
 
 
 # ---------------------------------------------------------------------------
-# Connexion
+# Connexion (pool borne, reutilisee entre requetes)
 # ---------------------------------------------------------------------------
 
-def db() -> sqlite3.Connection:
+_POOL_SIZE = 8
+_pool: "Queue[sqlite3.Connection]" = Queue(maxsize=_POOL_SIZE)
+
+
+def _new_connection() -> sqlite3.Connection:
     DATA_DIR.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(DB_PATH, timeout=30)
+    conn = sqlite3.connect(DB_PATH, timeout=30, check_same_thread=False)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA busy_timeout = 30000")
     return conn
+
+
+@contextlib.contextmanager
+def db():
+    """Connexion SQLite empruntee a un pool borne.
+
+    Reprend la semantique transactionnelle de sqlite3 (commit en sortie normale,
+    rollback sur exception) mais recycle la connexion au lieu de la rouvrir + PRAGMA
+    a chaque requete. `check_same_thread=False` est sûr : le pool garantit qu'une
+    connexion n'est detenue que par un seul thread a la fois.
+    """
+    try:
+        conn = _pool.get_nowait()
+    except Empty:
+        conn = _new_connection()
+    try:
+        yield conn
+        conn.commit()
+    except BaseException:
+        conn.rollback()
+        raise
+    finally:
+        try:
+            _pool.put_nowait(conn)
+        except Full:
+            conn.close()
 
 
 # ---------------------------------------------------------------------------

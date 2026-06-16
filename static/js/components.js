@@ -121,7 +121,7 @@ export function firstEmptyShowcaseSlot(items = state.collection) {
   return null;
 }
 
-export function collectionCardHtml(item, featured, readonly = false, menuScope = "collection") {
+export function collectionCardHtml(item, featured, readonly = false, menuScope = "collection", precomputedSlot) {
   const title = item.owned && item.url
     ? `<a class="film-link" href="${escapeHtml(item.url)}" target="_blank" rel="noopener noreferrer">${escapeHtml(item.name)}</a>`
     : escapeHtml(item.name);
@@ -131,7 +131,9 @@ export function collectionCardHtml(item, featured, readonly = false, menuScope =
   const isSendMode = isMenuOpen && state.cardMenuMode === "send";
   const sellPrice = SELL_PRICES[item.rarity] || 0;
   const isShowcased = Number(item.showcaseSlot || 0) > 0;
-  const nextShowcaseSlot = firstEmptyShowcaseSlot();
+  // Slot libre calcule une fois par grille (cf. collectionGridHtml) ; fallback pour les
+  // rendus unitaires (resultHtml, vitrine) afin d'eviter un calcul O(N) par carte.
+  const nextShowcaseSlot = precomputedSlot !== undefined ? precomputedSlot : firstEmptyShowcaseSlot();
   const canAddShowcase = isShowcased || nextShowcaseSlot !== null;
   return `
     <article class="card rarity-${item.rarity} ${featured ? "featured" : ""} ${item.favorite ? "favorite" : ""} ${item.watchlist ? "watchlist" : ""} ${item.owned ? "" : "locked"}" data-card-id="${item.id}">
@@ -169,8 +171,13 @@ export function collectionCardHtml(item, featured, readonly = false, menuScope =
   `;
 }
 
-export function cardHtml(item) {
-  return collectionCardHtml(item, false);
+// Rend une grille de cartes possedees en calculant le slot de vitrine libre UNE seule fois
+// (au lieu d'un calcul O(N) par carte -> O(N^2) sur la collection).
+export function collectionGridHtml(items) {
+  const nextSlot = firstEmptyShowcaseSlot();
+  return items
+    .map((item) => collectionCardHtml(item, false, false, "collection", nextSlot))
+    .join("");
 }
 
 export function publicCardHtml(item) {
@@ -279,27 +286,20 @@ export function resultHtml(result) {
 // ---------------------------------------------------------------------------
 
 export function collectionStats() {
-  const stats = {
-    total:    state.collection.length,
-    owned:    0,
-    seen:     0,
-    favorites:0,
-    watchlist:0,
-    byRarity: Object.fromEntries(RARITIES.map((r) => [r, { total: 0, owned: 0 }])),
+  // Totaux servis par le backend (collection_summary). state.collection ne contient
+  // que les cartes possedees, donc les totaux ne peuvent plus etre recalcules ici.
+  const summary = state.collectionSummary;
+  return {
+    total:     summary?.total     || 0,
+    owned:     summary?.owned     || 0,
+    seen:      summary?.seen      || 0,
+    favorites: summary?.favorites || 0,
+    watchlist: summary?.watchlist || 0,
+    byRarity: Object.fromEntries(RARITIES.map((r) => [r, {
+      total: summary?.byRarity?.[r]?.total || 0,
+      owned: summary?.byRarity?.[r]?.owned || 0,
+    }])),
   };
-  state.collection.forEach((item) => {
-    const entry = stats.byRarity[item.rarity] || { total: 0, owned: 0 };
-    entry.total += 1;
-    if (item.owned) {
-      stats.owned += 1;
-      entry.owned += 1;
-      if (item.seen)      stats.seen      += 1;
-      if (item.favorite)  stats.favorites += 1;
-      if (item.watchlist) stats.watchlist += 1;
-    }
-    stats.byRarity[item.rarity] = entry;
-  });
-  return stats;
 }
 
 export function collectionStatsHtml() {
@@ -380,7 +380,7 @@ export function filterCountText(count) {
 }
 
 export function collectionEmptyHtml() {
-  if (!state.collection.some((i) => i.owned)) {
+  if (!state.collection.length) {
     return `<p class="empty-state"><strong>Ta collection est vide.</strong><br>Tourne la manette pour obtenir ta première carte&nbsp;!</p>`;
   }
   return `<p class="empty-state">Aucun film ne correspond à ces filtres.</p>`;

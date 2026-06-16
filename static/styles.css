@@ -875,7 +875,8 @@ input, select {
   transform: perspective(900px) translateY(0) scale(1) rotateX(var(--tilt-x)) rotateY(var(--tilt-y));
   transform-style: preserve-3d;
   transition: transform .26s cubic-bezier(.17, .9, .25, 1.18), box-shadow .2s ease, filter .2s ease;
-  will-change: transform;
+  /* will-change pose dynamiquement au survol (bindCardTilt) pour eviter une couche de
+     composition permanente par carte — couteux quand la grille en contient beaucoup. */
 }
 
 .card.rarity-C {

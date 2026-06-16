@@ -74,10 +74,8 @@ DATASET = load_dataset()
 ITEMS: dict[str, dict] = {item["id"]: item for item in DATASET["items"]}
 
 _POOLS_BY_RARITY: dict[str, list[dict]] = {}
-_RARITY_ITEM_IDS: dict[str, list[str]] = {}
 for _item in DATASET["items"]:
     _POOLS_BY_RARITY.setdefault(_item["rarity"], []).append(_item)
-    _RARITY_ITEM_IDS.setdefault(_item["rarity"], []).append(_item["id"])
 
 
 # ---------------------------------------------------------------------------
@@ -287,6 +285,43 @@ def collection_for(conn: sqlite3.Connection, user_id: int) -> list[dict]:
     return payload
 
 
+def owned_collection_for(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    """Cartes possedees uniquement (count > 0), avec l'etat par utilisateur.
+
+    Ne revele aucun film non debloque (voir collection_for pour la version complete
+    avec items caches). Payload proportionnel a la collection du joueur.
+    """
+    rows = conn.execute(
+        "SELECT item_id, count FROM inventory WHERE user_id = ? AND count > 0", (user_id,)
+    ).fetchall()
+    counts = {row["item_id"]: row["count"] for row in rows}
+    if not counts:
+        return []
+
+    state_rows = conn.execute(
+        "SELECT item_id, seen, favorite, watchlist, showcase_slot FROM collection_state WHERE user_id = ?",
+        (user_id,),
+    ).fetchall()
+    cstate = {r["item_id"]: r for r in state_rows}
+
+    payload = []
+    for item in DATASET["items"]:
+        count = counts.get(item["id"], 0)
+        if count <= 0:
+            continue
+        entry = item_payload(item["id"], count)
+        cs = cstate.get(item["id"])
+        favorite = bool(cs["favorite"]) if cs else False
+        entry["seen"] = bool(cs["seen"]) if cs else False
+        entry["favorite"] = favorite
+        entry["watchlist"] = (bool(cs["watchlist"]) if cs else False) and not favorite
+        entry["showcaseSlot"] = (
+            int(cs["showcase_slot"]) if cs and cs["showcase_slot"] is not None else None
+        )
+        payload.append(entry)
+    return payload
+
+
 def collection_summary(conn: sqlite3.Connection, user_id: int) -> dict:
     rows = conn.execute(
         "SELECT item_id, count FROM inventory WHERE user_id = ? AND count > 0", (user_id,)
@@ -401,50 +436,60 @@ def load_achievements() -> dict[str, dict]:
 ACHIEVEMENTS: dict[str, dict] = load_achievements()
 
 
-def _achievement_progress(conn: sqlite3.Connection, user_id: int, ach_id: str) -> tuple[int, int]:
-    def scalar(sql: str, params: tuple = ()) -> int:
-        return int(conn.execute(sql, params).fetchone()[0])
+def _user_metrics(conn: sqlite3.Connection, user_id: int) -> dict:
+    """Agrege en quelques requetes toutes les metriques de succes d'un utilisateur,
+    au lieu d'une requete par succes (~21)."""
+    cs = conn.execute(
+        """
+        SELECT
+            COALESCE(SUM(seen), 0)      AS seen,
+            COALESCE(SUM(favorite), 0)  AS favorites,
+            COALESCE(SUM(watchlist), 0) AS watchlist
+        FROM collection_state WHERE user_id = ?
+        """,
+        (user_id,),
+    ).fetchone()
+    urow = conn.execute(
+        "SELECT credits, total_sells FROM users WHERE id = ?", (user_id,)
+    ).fetchone()
 
-    ach = ACHIEVEMENTS.get(ach_id)
-    if not ach:
-        return 0, 1
-    metric = ach["metric"]
-    target = int(ach["target"])
+    rarity_rolls: dict[str, int] = {}
+    total_rolls = 0
+    for row in conn.execute(
+        "SELECT item_id, COUNT(*) AS n FROM rolls WHERE user_id = ? GROUP BY item_id",
+        (user_id,),
+    ):
+        n = int(row["n"])
+        total_rolls += n
+        item = ITEMS.get(row["item_id"])
+        if item:
+            rarity_rolls[item["rarity"]] = rarity_rolls.get(item["rarity"], 0) + n
 
-    if metric == "rolls":
-        return scalar("SELECT COUNT(*) FROM rolls WHERE user_id = ?", (user_id,)), target
-    if metric == "collection":
-        return scalar(
-            "SELECT COUNT(DISTINCT item_id) FROM inventory WHERE user_id = ? AND count > 0", (user_id,)
-        ), target
-    if metric == "rarity_roll":
-        rarity = ach.get("rarity", "")
-        ids = _RARITY_ITEM_IDS.get(rarity, [])
-        if not ids:
-            return 0, target
-        ph = ",".join("?" * len(ids))
-        return scalar(
-            f"SELECT COUNT(*) FROM rolls WHERE user_id = ? AND item_id IN ({ph})",
-            (user_id, *ids),
-        ), target
-    if metric == "seen":
-        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND seen = 1", (user_id,)), target
-    if metric == "trades_sent":
-        return scalar("SELECT COUNT(*) FROM trades WHERE from_user_id = ?", (user_id,)), target
-    if metric == "sells":
-        return scalar("SELECT total_sells FROM users WHERE id = ?", (user_id,)), target
-    if metric == "favorites":
-        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND favorite = 1", (user_id,)), target
-    if metric == "watchlist":
-        return scalar("SELECT COUNT(*) FROM collection_state WHERE user_id = ? AND watchlist = 1", (user_id,)), target
-    if metric == "credits":
-        return scalar("SELECT credits FROM users WHERE id = ?", (user_id,)), target
-    return 0, target
+    distinct_owned = int(conn.execute(
+        "SELECT COUNT(DISTINCT item_id) FROM inventory WHERE user_id = ? AND count > 0",
+        (user_id,),
+    ).fetchone()[0])
+    trades_sent = int(conn.execute(
+        "SELECT COUNT(*) FROM trades WHERE from_user_id = ?", (user_id,)
+    ).fetchone()[0])
+
+    return {
+        "rolls":       total_rolls,
+        "collection":  distinct_owned,
+        "seen":        int(cs["seen"]) if cs else 0,
+        "favorites":   int(cs["favorites"]) if cs else 0,
+        "watchlist":   int(cs["watchlist"]) if cs else 0,
+        "trades_sent": trades_sent,
+        "sells":       int(urow["total_sells"]) if urow else 0,
+        "credits":     int(urow["credits"]) if urow else 0,
+        "rarity_rolls": rarity_rolls,
+    }
 
 
-def _check_achievement(conn: sqlite3.Connection, user_id: int, ach_id: str) -> bool:
-    current, target = _achievement_progress(conn, user_id, ach_id)
-    return target > 0 and current >= target
+def _metric_value(metrics: dict, ach: dict) -> int:
+    if ach["metric"] == "rarity_roll":
+        return metrics["rarity_rolls"].get(ach.get("rarity", ""), 0)
+    return int(metrics.get(ach["metric"], 0))
 
 
 def check_and_unlock_achievements(conn: sqlite3.Connection, user_id: int) -> list[dict]:
@@ -454,20 +499,25 @@ def check_and_unlock_achievements(conn: sqlite3.Connection, user_id: int) -> lis
             "SELECT achievement_id FROM user_achievements WHERE user_id = ?", (user_id,)
         ).fetchall()
     }
+    metrics = _user_metrics(conn, user_id)
     newly: list[dict] = []
     for ach_id, ach in ACHIEVEMENTS.items():
         if ach_id in already:
             continue
-        if _check_achievement(conn, user_id, ach_id):
-            ts = now()
-            inserted = conn.execute(
-                "INSERT OR IGNORE INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)",
-                (user_id, ach_id, ts),
-            )
-            if inserted.rowcount == 0:
-                continue
-            conn.execute("UPDATE users SET credits = credits + ? WHERE id = ?", (ach["reward"], user_id))
-            newly.append({**ach, "id": ach_id, "unlockedAt": ts})
+        target = int(ach["target"])
+        if target <= 0 or _metric_value(metrics, ach) < target:
+            continue
+        ts = now()
+        inserted = conn.execute(
+            "INSERT OR IGNORE INTO user_achievements (user_id, achievement_id, unlocked_at) VALUES (?, ?, ?)",
+            (user_id, ach_id, ts),
+        )
+        if inserted.rowcount == 0:
+            continue
+        conn.execute("UPDATE users SET credits = credits + ? WHERE id = ?", (ach["reward"], user_id))
+        # La recompense peut faire franchir le seuil d'un succes "credits" suivant.
+        metrics["credits"] += ach["reward"]
+        newly.append({**ach, "id": ach_id, "unlockedAt": ts})
     return newly
 
 
@@ -478,16 +528,18 @@ def achievements_for_user(conn: sqlite3.Connection, user_id: int) -> list[dict]:
             "SELECT achievement_id, unlocked_at FROM user_achievements WHERE user_id = ?", (user_id,)
         ).fetchall()
     }
+    metrics = _user_metrics(conn, user_id)
     result = []
     for ach_id, ach in ACHIEVEMENTS.items():
-        current, target = _achievement_progress(conn, user_id, ach_id)
+        target = int(ach["target"])
+        current = min(_metric_value(metrics, ach), target)
         entry: dict = {
             **ach,
             "id": ach_id,
             "unlocked": ach_id in unlocked,
-            "current": min(current, target),
+            "current": current,
             "target": target,
-            "progress": round((min(current, target) / target) * 100) if target else 0,
+            "progress": round((current / target) * 100) if target else 0,
         }
         if ach_id in unlocked:
             entry["unlockedAt"] = unlocked[ach_id]

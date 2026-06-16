@@ -6,7 +6,7 @@ import {
 } from "./js/state.js";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
-  cardHtml, collectionEmptyHtml, collectionStatsHtml,
+  collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
   creditsPanelHtml, dropRatesHtml, filterCountText, filteredCollection,
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
   loginForms, nav, publicCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
@@ -182,6 +182,7 @@ async function refresh({ shouldRender = true } = {}) {
     ];
     const [collection, users, leaderboardData, achievementsData] = await Promise.all(requests);
     state.collection = collection.items;
+    state.collectionSummary = collection.summary || null;
     syncResultItems(state.collection);
     if (typeof collection.credits === "number") mergeUser(collection);
     state.users = users.users;
@@ -193,6 +194,7 @@ async function refresh({ shouldRender = true } = {}) {
       localStorage.removeItem("gachaUser");
       state.user       = null;
       state.collection = [];
+      state.collectionSummary = null;
       state.users      = [];
       state.trades     = [];
       state.leaderboard = [];
@@ -238,16 +240,13 @@ function renderShell(content) {
   bindKeyModal();
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
-      const prevView = state.view;
       state.view = button.dataset.view;
-      if (
-        (state.view === "leaderboard"  && prevView !== "leaderboard") ||
-        (state.view === "achievements" && prevView !== "achievements")
-      ) {
-        refresh({ shouldRender: true });
-      } else {
-        render();
-      }
+      // Bascule immediate depuis le cache : pas d'attente reseau au changement d'onglet.
+      render();
+      // Donnees specifiques a la vue, rafraichies en arriere-plan (non bloquant).
+      // Collection/users sont deja en memoire ; seules les vues a donnees fraiches refetchent.
+      if (state.view === "leaderboard") loadLeaderboard();
+      else if (state.view === "achievements") loadAchievements();
     });
   });
 }
@@ -447,7 +446,7 @@ function renderCollection() {
         <span class="filter-count">${filterCountText(items.length)}</span>
         <button class="ghost filter-reset ${active ? "is-active" : ""}" id="resetFilters" type="button">Effacer les filtres</button>
       </div>
-      <div class="grid collection-grid">${items.length ? items.map(cardHtml).join("") : collectionEmptyHtml()}</div>
+      <div class="grid collection-grid">${items.length ? collectionGridHtml(items) : collectionEmptyHtml()}</div>
     </section>
   `);
   ["q", "rarity", "owned"].forEach((id) => {
@@ -468,7 +467,7 @@ function renderCollectionGrid() {
   state.activeCardMenu = null;
   state.cardMenuMode = null;
   const items = filteredCollection();
-  grid.innerHTML = items.length ? items.map(cardHtml).join("") : collectionEmptyHtml();
+  grid.innerHTML = items.length ? collectionGridHtml(items) : collectionEmptyHtml();
   const countEl = document.querySelector(".filter-count");
   if (countEl) countEl.textContent = filterCountText(items.length);
   const active = hasActiveFilters();
@@ -536,6 +535,19 @@ function renderLeaderboard() {
   });
 }
 
+function loadLeaderboard() {
+  // Rafraichit le classement en arriere-plan puis met a jour la vue si on y est encore.
+  return api("/api/leaderboard")
+    .then((data) => {
+      state.leaderboard = data.leaderboard || [];
+      if (state.view !== "leaderboard") return;
+      // Full render (maj du compteur de joueurs) sauf si l'utilisateur tape une recherche.
+      if (document.getElementById("leaderboardSearch") !== document.activeElement) render();
+      else renderLeaderboardList();
+    })
+    .catch(() => {});
+}
+
 function renderLeaderboardList() {
   const list = document.querySelector(".leaderboard-list");
   if (!list) return render();
@@ -581,6 +593,7 @@ function renderLogin() {
       localStorage.removeItem("gachaUser");
       state.user       = null;
       state.collection = [];
+      state.collectionSummary = null;
       state.leaderboard = [];
       state.achievements = [];
       state.achievementQueue = [];
@@ -648,6 +661,7 @@ async function resetCollection() {
     const reset = await api("/api/collection/reset", { method: "POST", body: "{}" });
     mergeUser(reset);
     state.collection  = [];
+    state.collectionSummary = null;
     state.trades      = [];
     state.achievements = [];
     state.achievementQueue = [];
@@ -858,6 +872,8 @@ function bindCardTilt() {
   if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
   document.querySelectorAll(".card").forEach((card) => {
     let frame = 0, targetX = 0, targetY = 0;
+    // will-change uniquement pendant l'interaction : pas de couche de composition permanente.
+    card.addEventListener("pointerenter", () => { card.style.willChange = "transform"; });
     card.addEventListener("pointermove", (event) => {
       const rect = card.getBoundingClientRect();
       const x = (event.clientX - rect.left) / rect.width;
@@ -876,6 +892,7 @@ function bindCardTilt() {
       frame = 0;
       card.style.removeProperty("--tilt-x");
       card.style.removeProperty("--tilt-y");
+      card.style.willChange = "";
     });
   });
 }
@@ -950,17 +967,22 @@ function bindInteractiveCards() {
 // Vue Succès
 // ---------------------------------------------------------------------------
 
+function loadAchievements() {
+  // Rafraichit la progression des succes en arriere-plan puis re-rend si on y est encore.
+  return api("/api/achievements")
+    .then((data) => {
+      state.achievements = data.achievements || [];
+      if (state.view === "achievements") renderShell(achievementsViewHtml());
+    })
+    .catch(() => {});
+}
+
 function renderAchievements() {
   if (requireLogin()) return;
   renderShell(achievementsViewHtml());
-  if (!state.achievements.length) {
-    api("/api/achievements")
-      .then((data) => {
-        state.achievements = data.achievements || [];
-        if (state.view === "achievements") renderShell(achievementsViewHtml());
-      })
-      .catch(() => {});
-  }
+  // Filet pour le tout premier affichage si le cache est vide (sinon l'onglet declenche
+  // deja un rafraichissement en arriere-plan via loadAchievements).
+  if (!state.achievements.length) loadAchievements();
 }
 
 // ---------------------------------------------------------------------------
