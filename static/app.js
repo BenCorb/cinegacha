@@ -9,7 +9,8 @@ import {
   cardHtml, collectionEmptyHtml, collectionStatsHtml,
   creditsPanelHtml, dropRatesHtml, filterCountText, filteredCollection,
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
-  loginForms, nav, publicCardHtml, publicCollectionHtml, resultHtml, walletHtml,
+  loginForms, nav, publicCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
+  walletHtml,
 } from "./js/components.js";
 
 const $ = (selector) => document.querySelector(selector);
@@ -20,7 +21,8 @@ const $ = (selector) => document.querySelector(selector);
 
 let creditTimerId = null;
 let creditRefreshInFlight = false;
-let messageTimer = null;
+const appToastQueue = [];
+let appToastTimer = null;
 const ROLL_COUNTS = [1, 5, 10];
 let achievementToastTimer = null;
 
@@ -57,6 +59,42 @@ function patchResultItems(itemId, patch) {
 
 function rollPrice(count = state.rollCount) {
   return `${(ROLL_COST * count).toLocaleString("fr-FR")}¥`;
+}
+
+// ---------------------------------------------------------------------------
+// Toasts applicatifs
+// ---------------------------------------------------------------------------
+
+function processAppToastQueue() {
+  if (!appToastQueue.length || document.getElementById("appToast")) return;
+  const { message, type } = appToastQueue.shift();
+  const toast = document.createElement("div");
+  toast.id = "appToast";
+  toast.className = `app-toast app-toast-${type}`;
+  toast.setAttribute("role", type === "error" ? "alert" : "status");
+  toast.innerHTML = `
+    <div class="app-toast-body">
+      <span class="app-toast-label">${type === "error" ? "Erreur" : type === "success" ? "OK" : "Info"}</span>
+      <strong>${escapeHtml(message)}</strong>
+    </div>
+    <button class="app-toast-close" type="button" aria-label="Fermer">×</button>
+  `;
+  document.body.appendChild(toast);
+
+  const dismiss = () => {
+    if (appToastTimer) { clearTimeout(appToastTimer); appToastTimer = null; }
+    toast.classList.add("is-dismissing");
+    setTimeout(() => { toast.remove(); processAppToastQueue(); }, 260);
+  };
+
+  toast.querySelector(".app-toast-close").addEventListener("click", dismiss);
+  appToastTimer = setTimeout(dismiss, type === "error" ? 5200 : 3600);
+}
+
+function showToast(message, type = "info") {
+  if (!message) return;
+  appToastQueue.push({ message, type });
+  processAppToastQueue();
 }
 
 // ---------------------------------------------------------------------------
@@ -164,12 +202,12 @@ async function refresh({ shouldRender = true } = {}) {
       state.pendingRoll = null;
       state.result = null;
       state.resultIndex = 0;
-      state.message = "Session expiree apres reset. Reconnecte-toi ou cree un compte.";
+      showToast("Session expiree apres reset. Reconnecte-toi ou cree un compte.", "error");
       state.view = "login";
       render();
       return;
     }
-    state.message = error.message;
+    showToast(error.message, "error");
     render();
   }
 }
@@ -188,7 +226,6 @@ function renderShell(content) {
         ${state.user ? walletHtml() : ""}
         <nav class="nav">${nav()}</nav>
       </header>
-      ${state.message ? `<div class="message">${escapeHtml(state.message)}</div>` : ""}
       ${content}
       ${keyModalHtml()}
       <datalist id="users-datalist">
@@ -196,13 +233,6 @@ function renderShell(content) {
       </datalist>
     </main>
   `;
-  if (state.message) {
-    if (messageTimer) clearTimeout(messageTimer);
-    messageTimer = setTimeout(() => {
-      state.message = "";
-      document.querySelector(".message")?.remove();
-    }, 4000);
-  }
   startCreditTimer();
   $("#refreshApp")?.addEventListener("click", () => window.location.reload());
   bindKeyModal();
@@ -210,8 +240,6 @@ function renderShell(content) {
     button.addEventListener("click", () => {
       const prevView = state.view;
       state.view = button.dataset.view;
-      state.message = "";
-      if (messageTimer) clearTimeout(messageTimer);
       if (
         (state.view === "leaderboard"  && prevView !== "leaderboard") ||
         (state.view === "achievements" && prevView !== "achievements")
@@ -314,7 +342,6 @@ function cycleRollCount() {
 }
 
 async function roll() {
-  state.message = "";
   state.rolling = true;
   const btn = $("#roll");
   if (btn) btn.disabled = true;
@@ -330,7 +357,7 @@ async function roll() {
     setTimeout(render, 650);
   } catch (e) {
     state.rolling = false;
-    state.message = e.message;
+    showToast(e.message, "error");
     render();
   }
 }
@@ -363,7 +390,7 @@ async function openCapsule() {
     }, state.openingRarity === "L" ? 1250 : state.openingRarity === "UR" ? 1100 : 900);
   } catch (e) {
     if (btn) btn.disabled = false;
-    state.message = e.message;
+    showToast(e.message, "error");
     render();
   }
 }
@@ -399,6 +426,7 @@ function renderCollection() {
   renderShell(`
     <section class="panel">
       ${collectionStatsHtml()}
+      ${showcaseEditorHtml()}
       <div class="filters">
         <input id="q" placeholder="Rechercher un film" value="${escapeHtml(state.filters.q)}">
         <select id="rarity">
@@ -528,11 +556,10 @@ function renderPublicCollectionGrid() {
 
 async function loadPublicCollection(username) {
   try {
-    state.message = "";
     state.publicCollection = await api(`/api/users/${encodeURIComponent(username)}/collection`);
     render();
   } catch (e) {
-    state.message = e.message;
+    showToast(e.message, "error");
     render();
   }
 }
@@ -578,12 +605,11 @@ function bindLogin() {
       saveUser(created);
       const copied = await copyConnectionKey(created.connectionKey);
       state.keyModal = { key: created.connectionKey, copied };
-      state.message = "";
       await refresh({ shouldRender: false });
       state.view = "gacha";
       render();
     } catch (e) {
-      state.message = e.message;
+      showToast(e.message, "error");
       renderLogin();
     }
   });
@@ -596,7 +622,7 @@ function bindLogin() {
       state.view = "gacha";
       await refresh();
     } catch (e) {
-      state.message = e.message;
+      showToast(e.message, "error");
       renderLogin();
     }
   });
@@ -609,10 +635,9 @@ async function regenerateConnectionKey() {
     saveUser({ ...state.user, ...updated });
     const copied = await copyConnectionKey(updated.connectionKey);
     state.keyModal = { key: updated.connectionKey, copied };
-    state.message = "";
     render();
   } catch (e) {
-    state.message = e.message;
+    showToast(e.message, "error");
     renderLogin();
   }
 }
@@ -629,12 +654,12 @@ async function resetCollection() {
     state.result      = null;
     state.resultIndex = 0;
     state.pendingRoll = null;
-    state.message = "Collection reset.";
+    showToast("Collection reset.", "success");
     await refresh();
     state.view = "login";
     render();
   } catch (e) {
-    state.message = e.message;
+    showToast(e.message, "error");
     renderLogin();
   }
 }
@@ -650,11 +675,11 @@ async function sellCard(itemId) {
     handleNewAchievements(sold);
     state.activeCardMenu = null;
     state.cardMenuMode = null;
-    state.message = `Carte vendue +${sold.earned}¥.`;
+    showToast(`Carte vendue +${sold.earned}¥.`, "success");
     await refresh({ shouldRender: false });
     render();
   } catch (e) {
-    state.message = e.message;
+    showToast(e.message, "error");
     render();
   }
 }
@@ -669,11 +694,11 @@ async function sendCard(event) {
     handleNewAchievements(sent);
     state.activeCardMenu = null;
     state.cardMenuMode = null;
-    state.message = "Carte envoyee.";
+    showToast("Carte envoyee.", "success");
     await refresh({ shouldRender: false });
     render();
   } catch (e) {
-    state.message = e.message;
+    showToast(e.message, "error");
     render();
   }
 }
@@ -696,7 +721,7 @@ async function toggleSeen(event) {
     state.view = currentView;
     updateSeenButton(button, nextSeen);
   } catch (e) {
-    state.message = e.message;
+    showToast(e.message, "error");
     render();
   }
 }
@@ -725,7 +750,7 @@ async function toggleFavorite(event) {
     state.cardMenuMode = null;
     render();
   } catch (e) {
-    state.message = e.message;
+    showToast(e.message, "error");
     render();
   }
 }
@@ -748,7 +773,27 @@ async function toggleWatchlist(event) {
     state.cardMenuMode = null;
     render();
   } catch (e) {
-    state.message = e.message;
+    showToast(e.message, "error");
+    render();
+  }
+}
+
+async function setShowcaseSlot(itemId, slot) {
+  try {
+    const updated = await api("/api/collection/showcase", {
+      method: "POST",
+      body: JSON.stringify({ itemId, slot }),
+    });
+    if (Array.isArray(updated.items)) {
+      state.collection = updated.items;
+      syncResultItems(state.collection);
+    }
+    state.activeCardMenu = null;
+    state.cardMenuMode = null;
+    showToast(slot === null ? "Carte retiree de la vitrine." : "Vitrine mise a jour.", "success");
+    render();
+  } catch (e) {
+    showToast(e.message, "error");
     render();
   }
 }
@@ -759,10 +804,10 @@ async function createTrade(event) {
   try {
     const sent = await api("/api/trades", { method: "POST", body: JSON.stringify(Object.fromEntries(form)) });
     handleNewAchievements(sent);
-    state.message = "Carte envoyee.";
+    showToast("Carte envoyee.", "success");
     await refresh();
   } catch (e) {
-    state.message = e.message;
+    showToast(e.message, "error");
     renderTrade();
   }
 }
@@ -778,7 +823,7 @@ function renderTrade() {
         <label>Carte à envoyer<select name="offerItemId">${dupes.map((i) => `<option value="${i.id}">${escapeHtml(i.name)} x${i.count}</option>`).join("")}</select></label>
         <button class="primary" ${!dupes.length ? "disabled" : ""}>Envoyer</button>
       </form>
-      ${!dupes.length ? `<div class="message">Il faut au moins un doublon pour envoyer une carte.</div>` : ""}
+      ${!dupes.length ? `<p class="muted-copy">Il faut au moins un doublon pour envoyer une carte.</p>` : ""}
       <div class="stack">${state.trades.map(tradeHtml).join("") || `<p>Aucun echange pour l'instant.</p>`}</div>
     </section>
   `);
@@ -850,6 +895,20 @@ function bindInteractiveCards() {
     button.addEventListener("click", toggleFavorite));
   document.querySelectorAll("[data-watchlist-id]").forEach((button) =>
     button.addEventListener("click", toggleWatchlist));
+  document.querySelectorAll("[data-showcase-id]").forEach((button) => {
+    button.addEventListener("click", (event) => {
+      event.stopPropagation();
+      const rawSlot = button.dataset.showcaseSlot;
+      setShowcaseSlot(button.dataset.showcaseId, rawSlot ? Number(rawSlot) : null);
+    });
+  });
+  document.querySelectorAll("[data-showcase-move]").forEach((button) => {
+    button.addEventListener("click", () =>
+      setShowcaseSlot(button.dataset.showcaseMove, Number(button.dataset.showcaseSlot)));
+  });
+  document.querySelectorAll("[data-showcase-remove]").forEach((button) => {
+    button.addEventListener("click", () => setShowcaseSlot(button.dataset.showcaseRemove, null));
+  });
   document.querySelectorAll("[data-poster-menu]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();

@@ -39,6 +39,7 @@ ROLL_COST = 100
 HOURLY_REFILL = 100
 REFILL_CAP = 5000
 SELL_PRICES: dict[str, int] = {"C": 20, "UC": 30, "R": 50, "UR": 100, "L": 150}
+SHOWCASE_LIMIT = 3
 CAPSULES: dict[str, dict] = {
     "C":  {"name": "Capsule argent",  "color": "#cfd6df"},
     "UC": {"name": "Capsule menthe",  "color": "#74d99f"},
@@ -260,12 +261,17 @@ def collection_for(conn: sqlite3.Connection, user_id: int) -> list[dict]:
     counts = {row["item_id"]: row["count"] for row in rows}
 
     seen_rows = conn.execute(
-        "SELECT item_id, seen, favorite, watchlist FROM collection_state WHERE user_id = ?",
+        "SELECT item_id, seen, favorite, watchlist, showcase_slot FROM collection_state WHERE user_id = ?",
         (user_id,),
     ).fetchall()
     seen      = {r["item_id"]: bool(r["seen"])      for r in seen_rows}
     favorites = {r["item_id"]: bool(r["favorite"])  for r in seen_rows}
     watchlist = {r["item_id"]: bool(r["watchlist"]) for r in seen_rows}
+    showcase  = {
+        r["item_id"]: int(r["showcase_slot"])
+        for r in seen_rows
+        if r["showcase_slot"] is not None
+    }
 
     payload = []
     for item in DATASET["items"]:
@@ -276,6 +282,7 @@ def collection_for(conn: sqlite3.Connection, user_id: int) -> list[dict]:
         entry["watchlist"] = (
             bool(watchlist.get(item["id"], False)) and count > 0 and not entry["favorite"]
         )
+        entry["showcaseSlot"] = showcase.get(item["id"]) if count > 0 else None
         payload.append(entry)
     return payload
 
