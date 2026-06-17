@@ -28,6 +28,16 @@ body {
     linear-gradient(135deg, #fff7d8 0%, #fff8f1 42%, #e9fbff 100%);
 }
 
+body.is-result-open {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100dvh;
+  overflow: hidden;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+
 button, input, select {
   font: inherit;
 }
@@ -626,6 +636,57 @@ input, select {
   z-index: 1;
 }
 
+.result-card .result-grid .card {
+  opacity: var(--result-swipe-opacity, 1);
+  transform:
+    translate3d(var(--result-swipe-x, 0), 0, 0)
+    rotate(var(--result-swipe-rotate, 0deg))
+    perspective(900px)
+    translateY(0)
+    scale(1)
+    rotateX(var(--tilt-x))
+    rotateY(var(--tilt-y));
+  transform-origin: 50% 82%;
+}
+
+.result-card .result-grid .card.is-swiping,
+.result-card .result-grid .card.is-swipe-returning,
+.result-card .result-grid .card.is-swipe-dismissed {
+  will-change: transform, opacity;
+}
+
+.result-card .result-grid .card.is-swiping {
+  transition: none;
+}
+
+.result-card .result-grid .card.is-swipe-returning {
+  transition: transform .2s cubic-bezier(.2, .9, .25, 1), opacity .2s ease;
+}
+
+.result-card .result-grid .card.is-swipe-dismissed {
+  pointer-events: none;
+  transition: transform .18s ease-in, opacity .18s ease-in;
+}
+
+@media (hover: hover) and (pointer: fine) {
+  .result-card .result-grid .card:hover {
+    transform:
+      translate3d(var(--result-swipe-x, 0), 0, 0)
+      rotate(var(--result-swipe-rotate, 0deg))
+      perspective(900px)
+      translateY(-5px)
+      scale(1.018)
+      rotateX(var(--tilt-x))
+      rotateY(var(--tilt-y));
+  }
+}
+
+@media (pointer: coarse) {
+  .view-gacha .result-grid .card {
+    touch-action: pan-y;
+  }
+}
+
 .result-stack-stage {
   position: relative;
   isolation: isolate;
@@ -780,6 +841,17 @@ input, select {
 
 .opening .result-card {
   animation: reveal-pop var(--impact-duration) cubic-bezier(.17, .9, .25, 1.25);
+}
+
+.reveal.is-result-swiping::after,
+.reveal.is-result-dismissing::after {
+  animation: none;
+  opacity: 0;
+}
+
+.reveal.is-result-swiping .burst,
+.reveal.is-result-dismissing .burst {
+  display: none;
 }
 
 @keyframes reveal-pop {
@@ -2267,7 +2339,8 @@ input, select {
     padding: 12px;
     display: grid;
     place-items: center;
-    overflow: auto;
+    overflow: hidden;
+    overscroll-behavior: none;
     background:
       radial-gradient(circle at 18% 18%, rgba(255,125,168,.22), transparent 30%),
       radial-gradient(circle at 82% 8%, rgba(100,200,242,.2), transparent 32%),

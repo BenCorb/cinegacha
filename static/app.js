@@ -25,6 +25,10 @@ const appToastQueue = [];
 let appToastTimer = null;
 const ROLL_COUNTS = [1, 5, 10];
 let achievementToastTimer = null;
+const RESULT_SWIPE_LOCK_DISTANCE = 12;
+const RESULT_SWIPE_RATIO = 0.32;
+const RESULT_SWIPE_MAX_DISTANCE = 96;
+const RESULT_SWIPE_MIN_VELOCITY = 0.55;
 
 function resultEntries(result = state.result) {
   if (!result) return [];
@@ -332,6 +336,156 @@ function renderGacha() {
   $("#roll").addEventListener("click", roll);
   $("#open")?.addEventListener("click", openCapsule);
   $("#closeResult")?.addEventListener("click", closeResult);
+  bindResultSwipe();
+}
+
+function bindResultSwipe() {
+  const resultCard = document.querySelector(".view-gacha .result-card");
+  const swipeCard = resultCard?.querySelector(".result-grid .card");
+  const reveal = resultCard?.closest(".reveal");
+  if (!resultCard || !swipeCard || !window.PointerEvent || !window.matchMedia("(pointer: coarse)").matches) return;
+
+  let pointerId = null;
+  let startX = 0;
+  let startY = 0;
+  let startTime = 0;
+  let currentX = 0;
+  let currentY = 0;
+  let locked = false;
+  let frame = 0;
+  let suppressClick = false;
+  let suppressClickTimer = 0;
+
+  const clearFrame = () => {
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+  };
+
+  const clearSwipeStyles = () => {
+    reveal?.classList.remove("is-result-swiping", "is-result-dismissing");
+    swipeCard.classList.remove("is-swiping", "is-swipe-returning", "is-swipe-dismissed");
+    swipeCard.style.removeProperty("--result-swipe-x");
+    swipeCard.style.removeProperty("--result-swipe-rotate");
+    swipeCard.style.removeProperty("--result-swipe-opacity");
+  };
+
+  const resetGesture = () => {
+    clearFrame();
+    pointerId = null;
+    locked = false;
+  };
+
+  const updateSwipeStyles = () => {
+    const width = swipeCard.getBoundingClientRect().width || 300;
+    const progress = Math.min(Math.abs(currentX) / width, 1);
+    const rotate = Math.max(-8, Math.min(8, (currentX / width) * 10));
+    swipeCard.style.setProperty("--result-swipe-x", `${currentX.toFixed(1)}px`);
+    swipeCard.style.setProperty("--result-swipe-rotate", `${rotate.toFixed(2)}deg`);
+    swipeCard.style.setProperty("--result-swipe-opacity", `${Math.max(0.58, 1 - progress * 0.42).toFixed(2)}`);
+    frame = 0;
+  };
+
+  const queueSwipeStyles = () => {
+    if (frame) return;
+    frame = requestAnimationFrame(updateSwipeStyles);
+  };
+
+  const suppressNextClick = () => {
+    suppressClick = true;
+    if (suppressClickTimer) clearTimeout(suppressClickTimer);
+    suppressClickTimer = setTimeout(() => { suppressClick = false; }, 450);
+  };
+
+  swipeCard.addEventListener("pointerdown", (event) => {
+    if (event.pointerType !== "touch" || event.isPrimary === false) return;
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    currentX = 0;
+    currentY = 0;
+    locked = false;
+    startTime = performance.now();
+    clearFrame();
+    swipeCard.classList.remove("is-swipe-returning", "is-swipe-dismissed");
+  });
+
+  swipeCard.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== pointerId) return;
+    currentX = event.clientX - startX;
+    currentY = event.clientY - startY;
+
+    const distanceX = Math.abs(currentX);
+    const distanceY = Math.abs(currentY);
+    if (!locked) {
+      if (distanceY > RESULT_SWIPE_LOCK_DISTANCE && distanceY > distanceX) {
+        resetGesture();
+        return;
+      }
+      if (distanceX < RESULT_SWIPE_LOCK_DISTANCE || distanceX <= distanceY) return;
+      locked = true;
+      reveal?.classList.add("is-result-swiping");
+      swipeCard.classList.add("is-swiping");
+      swipeCard.setPointerCapture?.(event.pointerId);
+    }
+
+    event.preventDefault();
+    queueSwipeStyles();
+  });
+
+  const finishSwipe = (event) => {
+    if (event.pointerId !== pointerId) return;
+    clearFrame();
+
+    if (!locked) {
+      resetGesture();
+      return;
+    }
+
+    suppressNextClick();
+    const width = swipeCard.getBoundingClientRect().width || 300;
+    const threshold = Math.min(RESULT_SWIPE_MAX_DISTANCE, width * RESULT_SWIPE_RATIO);
+    const elapsed = Math.max(1, performance.now() - startTime);
+    const velocity = Math.abs(currentX) / elapsed;
+    const shouldDismiss = Math.abs(currentX) >= threshold
+      || (velocity >= RESULT_SWIPE_MIN_VELOCITY && Math.abs(currentX) >= RESULT_SWIPE_LOCK_DISTANCE * 2);
+
+    swipeCard.classList.remove("is-swiping");
+    if (shouldDismiss) {
+      const direction = currentX < 0 ? -1 : 1;
+      const exitDistance = direction * (window.innerWidth + width);
+      reveal?.classList.remove("is-result-swiping");
+      reveal?.classList.add("is-result-dismissing");
+      swipeCard.style.setProperty("--result-swipe-x", `${exitDistance}px`);
+      swipeCard.style.setProperty("--result-swipe-rotate", `${direction * 8}deg`);
+      swipeCard.style.setProperty("--result-swipe-opacity", "0");
+      swipeCard.classList.add("is-swipe-dismissed");
+      setTimeout(closeResult, 180);
+    } else {
+      reveal?.classList.remove("is-result-swiping");
+      swipeCard.style.setProperty("--result-swipe-x", "0px");
+      swipeCard.style.setProperty("--result-swipe-rotate", "0deg");
+      swipeCard.style.setProperty("--result-swipe-opacity", "1");
+      swipeCard.classList.add("is-swipe-returning");
+      setTimeout(clearSwipeStyles, 220);
+    }
+
+    resetGesture();
+  };
+
+  const cancelSwipe = (event) => {
+    if (event.pointerId !== pointerId) return;
+    resetGesture();
+    clearSwipeStyles();
+  };
+
+  swipeCard.addEventListener("pointerup", finishSwipe);
+  swipeCard.addEventListener("pointercancel", cancelSwipe);
+  swipeCard.addEventListener("click", (event) => {
+    if (!suppressClick) return;
+    suppressClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }, true);
 }
 
 function cycleRollCount() {
@@ -997,6 +1151,7 @@ function render() {
   else if (state.view === "achievements") renderAchievements();
   else if (state.view === "login")        renderLogin();
   else                                    renderGacha();
+  document.body.classList.toggle("is-result-open", state.view === "gacha" && Boolean(state.result));
   bindInteractiveCards();
 }
 
