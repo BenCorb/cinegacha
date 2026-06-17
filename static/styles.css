@@ -60,6 +60,25 @@ button.blue { background: var(--blue); color: white; }
 button.ghost { box-shadow: none; border-color: #d5dce8; }
 button:disabled { opacity: .45; cursor: not-allowed; transform: none; }
 
+.back-to-top {
+  position: fixed;
+  right: max(18px, env(safe-area-inset-right));
+  bottom: max(18px, env(safe-area-inset-bottom));
+  width: 46px;
+  height: 46px;
+  padding: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fffaf2;
+  color: var(--ink);
+  font-size: 1.45rem;
+  font-weight: 900;
+  line-height: 1;
+  z-index: 900;
+  box-shadow: 0 4px 0 #263249, 0 8px 18px rgba(35,48,68,.16);
+}
+
 input, select {
   width: 100%;
   border: 2px solid #d7deea;

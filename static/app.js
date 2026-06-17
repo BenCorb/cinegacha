@@ -223,6 +223,7 @@ async function refresh({ shouldRender = true } = {}) {
 // ---------------------------------------------------------------------------
 
 function renderShell(content) {
+  const showBackToTop = state.view === "collection" || state.view === "leaderboard";
   $("#app").innerHTML = `
     <main class="shell view-${state.view}">
       <header class="topbar">
@@ -234,6 +235,7 @@ function renderShell(content) {
       </header>
       ${content}
       ${keyModalHtml()}
+      ${showBackToTop ? `<button class="back-to-top" id="backToTop" type="button" aria-label="Revenir en haut de la page">↑</button>` : ""}
       <datalist id="users-datalist">
         ${state.users.filter((u) => u !== state.user?.username).map((u) => `<option value="${escapeHtml(u)}">`).join("")}
       </datalist>
@@ -252,6 +254,9 @@ function renderShell(content) {
       if (state.view === "leaderboard") loadLeaderboard();
       else if (state.view === "achievements") loadAchievements();
     });
+  });
+  $("#backToTop")?.addEventListener("click", () => {
+    window.scrollTo({ top: 0, behavior: "smooth" });
   });
 }
 
