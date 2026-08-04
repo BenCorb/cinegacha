@@ -91,6 +91,7 @@ class NotificationIntegrationTests(unittest.TestCase):
         item_id = next(iter(game.ITEMS))
         with sqlite3.connect(migration_db) as conn:
             conn.execute("DROP TABLE notifications")
+            conn.execute("ALTER TABLE users DROP COLUMN letterboxd_username")
             conn.executemany(
                 """
                 INSERT INTO users
@@ -111,13 +112,103 @@ class NotificationIntegrationTests(unittest.TestCase):
 
         with sqlite3.connect(migration_db) as conn:
             columns = {row[1] for row in conn.execute("PRAGMA table_info(notifications)")}
+            user_columns = {row[1] for row in conn.execute("PRAGMA table_info(users)")}
             count = conn.execute("SELECT COUNT(*) FROM notifications").fetchone()[0]
+            letterboxd_values = conn.execute(
+                "SELECT letterboxd_username FROM users ORDER BY id"
+            ).fetchall()
             legacy_trade = conn.execute(
                 "SELECT COUNT(*) FROM trades WHERE id = 'legacy-trade'"
             ).fetchone()[0]
         self.assertTrue({"type", "source_id", "payload_json", "read_at"}.issubset(columns))
+        self.assertIn("letterboxd_username", user_columns)
+        self.assertEqual(letterboxd_values, [(None,), (None,)])
         self.assertEqual(count, 0)
         self.assertEqual(legacy_trade, 1)
+
+    def test_letterboxd_profile_lifecycle_validation_and_isolation(self) -> None:
+        first_user = self.create_user("letterboxd-owner")
+        second_user = self.create_user("letterboxd-other")
+        self.assertIsNone(first_user["letterboxdUsername"])
+
+        status, updated = self.request(
+            "/api/profile/letterboxd",
+            auth=first_user,
+            body={"username": "  @CineFan_42  "},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(updated["letterboxdUsername"], "CineFan_42")
+
+        status, session = self.request(
+            "/api/session",
+            body={
+                "username": first_user["username"],
+                "connectionKey": first_user["connectionKey"],
+            },
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(session["letterboxdUsername"], "CineFan_42")
+
+        status, public_profile = self.request(
+            f"/api/users/{first_user['username']}/collection",
+            auth=second_user,
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(public_profile["letterboxdUsername"], "CineFan_42")
+
+        for invalid_username in (
+            "bad/profile",
+            "two words",
+            "bad?query",
+            "bad#fragment",
+            "control\ncharacter",
+            "a" * 65,
+        ):
+            status, error = self.request(
+                "/api/profile/letterboxd",
+                auth=first_user,
+                body={"username": invalid_username},
+            )
+            self.assertEqual(status, 400)
+            self.assertEqual(error["error"], "Pseudo Letterboxd invalide.")
+
+        status, _ = self.request(
+            "/api/profile/letterboxd", auth=first_user, body={}
+        )
+        self.assertEqual(status, 400)
+
+        status, second_updated = self.request(
+            "/api/profile/letterboxd",
+            auth=second_user,
+            body={"username": "OtherProfile"},
+        )
+        self.assertEqual(status, 200)
+        self.assertEqual(second_updated["letterboxdUsername"], "OtherProfile")
+
+        _, first_profile = self.request(
+            f"/api/users/{first_user['username']}/collection",
+            auth=second_user,
+        )
+        self.assertEqual(first_profile["letterboxdUsername"], "CineFan_42")
+
+        status, _ = self.request("/api/collection/reset", auth=first_user, body={})
+        self.assertEqual(status, 200)
+        _, first_profile_after_reset = self.request(
+            f"/api/users/{first_user['username']}/collection",
+            auth=second_user,
+        )
+        self.assertEqual(first_profile_after_reset["letterboxdUsername"], "CineFan_42")
+
+        status, unlinked = self.request(
+            "/api/profile/letterboxd", auth=first_user, body={"username": ""}
+        )
+        self.assertEqual(status, 200)
+        self.assertIsNone(unlinked["letterboxdUsername"])
+        _, public_profile_after_unlink = self.request(
+            f"/api/users/{first_user['username']}/collection",
+            auth=second_user,
+        )
+        self.assertIsNone(public_profile_after_unlink["letterboxdUsername"])
 
     def test_card_and_achievement_notifications_and_read_isolation(self) -> None:
         sender = self.create_user("sender")

@@ -9,6 +9,7 @@ import gzip
 import hmac
 import json
 import os
+import re
 import secrets
 import socket
 import sqlite3
@@ -69,6 +70,8 @@ ROLL_COUNTS = {1, 5, 10}
 RARITY_POWER = {"C": 0, "UC": 1, "R": 2, "UR": 3, "L": 4}
 GZIP_MIN_BYTES = 1024
 GZIP_STATIC_SUFFIXES = (".js", ".css", ".html", ".json", ".svg")
+LETTERBOXD_USERNAME_RE = re.compile(r"[A-Za-z0-9_-]+")
+LETTERBOXD_USERNAME_MAX_LENGTH = 64
 
 
 def _unlock_achievements(conn: sqlite3.Connection, user: dict) -> list[dict]:
@@ -88,6 +91,24 @@ def _showcase_slot(value) -> int | None:
     if slot < 1 or slot > SHOWCASE_LIMIT:
         raise ApiError(HTTPStatus.BAD_REQUEST, "Emplacement de vitrine invalide.")
     return slot
+
+
+def _normalize_letterboxd_username(value) -> str | None:
+    if value is None:
+        return None
+    if not isinstance(value, str):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Pseudo Letterboxd invalide.")
+    username = value.strip()
+    if username.startswith("@"):
+        username = username[1:].strip()
+    if not username:
+        return None
+    if (
+        len(username) > LETTERBOXD_USERNAME_MAX_LENGTH
+        or not LETTERBOXD_USERNAME_RE.fullmatch(username)
+    ):
+        raise ApiError(HTTPStatus.BAD_REQUEST, "Pseudo Letterboxd invalide.")
+    return username
 
 
 def _set_showcase_slot(
@@ -360,12 +381,14 @@ class Handler(SimpleHTTPRequestHandler):
                     if len(parts) == 4 and parts[1] == "users" and parts[3] == "collection":
                         username = unquote(parts[2])
                         target = conn.execute(
-                            "SELECT id, username FROM users WHERE username = ?", (username,)
+                            "SELECT id, username, letterboxd_username FROM users WHERE username = ?",
+                            (username,),
                         ).fetchone()
                         if not target:
                             raise ApiError(HTTPStatus.NOT_FOUND, "Joueur introuvable.")
                         self.send_json({
                             "username": target["username"],
+                            "letterboxdUsername": target["letterboxd_username"],
                             "summary": collection_summary(conn, target["id"]),
                             "items": owned_collection_for(conn, target["id"]),
                         })
@@ -430,6 +453,7 @@ class Handler(SimpleHTTPRequestHandler):
                         raise ApiError(HTTPStatus.CONFLICT, "Ce nom est deja pris.")
                     self.send_json({
                         "username": username,
+                        "letterboxdUsername": None,
                         "connectionKey": key,
                         "credits": STARTING_CREDITS,
                         "nextCreditAt": next_full_hour(ts),
@@ -450,6 +474,19 @@ class Handler(SimpleHTTPRequestHandler):
                     return
 
                 user = require_user(self, conn)
+
+                # --- Profil Letterboxd ---
+                if parsed.path == "/api/profile/letterboxd":
+                    if "username" not in body:
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "Pseudo Letterboxd requis.")
+                    letterboxd_username = _normalize_letterboxd_username(body["username"])
+                    conn.execute(
+                        "UPDATE users SET letterboxd_username = ? WHERE id = ?",
+                        (letterboxd_username, user["id"]),
+                    )
+                    refreshed = refill_user(conn, user["id"])
+                    self.send_json(user_payload(refreshed) or {})
+                    return
 
                 # --- Regénérer la clé ---
                 if parsed.path == "/api/session/key":

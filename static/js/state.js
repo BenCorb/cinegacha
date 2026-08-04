@@ -170,7 +170,7 @@ export function mergeUser(user) {
     serverClockOffsetMs = user.serverNow * 1000 - Date.now();
   }
   const fields = {};
-  ["username", "credits", "nextCreditAt", "refillCap", "serverNow"].forEach((key) => {
+  ["username", "letterboxdUsername", "credits", "nextCreditAt", "refillCap", "serverNow"].forEach((key) => {
     if (key in user) fields[key] = user[key];
   });
   state.user = { ...state.user, ...fields };
