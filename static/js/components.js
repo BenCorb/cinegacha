@@ -2,7 +2,7 @@ import {
   state,
   RARITIES, RARITY_RANK, SELL_PRICES, SHOWCASE_LIMIT,
   creditTimerText, escapeHtml, formatCredits, statsHtml,
-} from "./state.js?v=notifications-5";
+} from "./state.js?v=notifications-6";
 
 // ---------------------------------------------------------------------------
 // Posters
@@ -51,13 +51,14 @@ export function nav() {
   return tabs
     .map(([id, label]) => {
       const unread = Number(state.unreadNotificationCount || 0);
+      const disabled = !state.user && id !== "login";
       const badge = id === "notifications"
         ? `<span class="notification-badge ${unread ? "" : "is-empty"}" aria-hidden="true">${unread > 99 ? "99+" : unread}</span>`
         : "";
       const ariaLabel = id === "notifications" && unread
         ? ` aria-label="Notifications, ${unread} non lue${unread > 1 ? "s" : ""}"`
         : "";
-      return `<button class="ghost ${state.view === id ? "active" : ""}" data-view="${id}"${ariaLabel}><span>${escapeHtml(label)}</span>${badge}</button>`;
+      return `<button class="ghost ${state.view === id ? "active" : ""}" data-view="${id}"${ariaLabel}${disabled ? " disabled" : ""}><span>${escapeHtml(label)}</span>${badge}</button>`;
     })
     .join("");
 }

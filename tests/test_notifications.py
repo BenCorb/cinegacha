@@ -7,6 +7,7 @@ import subprocess
 import sys
 import tempfile
 import threading
+import time
 import unittest
 from http.server import ThreadingHTTPServer
 from pathlib import Path
@@ -200,11 +201,17 @@ class NotificationIntegrationTests(unittest.TestCase):
     def test_clear_notifications_is_isolated_and_idempotent(self) -> None:
         first_user = self.create_user("first-user")
         second_user = self.create_user("second-user")
+        users = {}
+        for _ in range(50):
+            with db() as conn:
+                users = {
+                    row["username"]: row["id"]
+                    for row in conn.execute("SELECT id, username FROM users").fetchall()
+                }
+            if first_user["username"] in users and second_user["username"] in users:
+                break
+            time.sleep(0.01)
         with db() as conn:
-            users = {
-                row["username"]: row["id"]
-                for row in conn.execute("SELECT id, username FROM users").fetchall()
-            }
             for source_id in ("first-one", "first-two"):
                 game.create_notification(
                     conn,

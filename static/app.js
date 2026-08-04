@@ -3,7 +3,7 @@ import {
   RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
-} from "./js/state.js?v=notifications-5";
+} from "./js/state.js?v=notifications-6";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
   collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
@@ -11,7 +11,7 @@ import {
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
   loginForms, nav, notificationsViewHtml, publicCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
   walletHtml,
-} from "./js/components.js?v=notifications-5";
+} from "./js/components.js?v=notifications-6";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -377,7 +377,7 @@ function renderShell(content) {
   startNotificationPolling();
   $("#refreshApp")?.addEventListener("click", () => window.location.reload());
   bindKeyModal();
-  document.querySelectorAll("[data-view]").forEach((button) => {
+  document.querySelectorAll("[data-view]:not(:disabled)").forEach((button) => {
     button.addEventListener("click", () => {
       const previousView = state.view;
       state.view = button.dataset.view;
@@ -419,14 +419,8 @@ function bindKeyModal() {
 
 function requireLogin() {
   if (state.user) return false;
-  renderShell(`
-    <section class="panel stack login-required">
-      <h1>Avant de tourner la manette</h1>
-      <p>Crée un nom d'utilisateur ou connecte-toi avec ta clé locale.</p>
-      ${loginForms()}
-    </section>
-  `);
-  bindLogin();
+  state.view = "login";
+  renderLogin();
   return true;
 }
 
@@ -1306,6 +1300,7 @@ function renderNotifications() {
 // ---------------------------------------------------------------------------
 
 function render() {
+  if (!state.user && state.view !== "login") state.view = "login";
   if      (state.view === "collection")   renderCollection();
   else if (state.view === "leaderboard")  renderLeaderboard();
   else if (state.view === "achievements") renderAchievements();
