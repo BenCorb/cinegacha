@@ -2,7 +2,7 @@ import {
   state,
   RARITIES, RARITY_RANK, SELL_PRICES, SHOWCASE_LIMIT,
   creditTimerText, escapeHtml, formatCredits, statsHtml,
-} from "./state.js?v=letterboxd-2";
+} from "./state.js?v=recipient-autocomplete-2";
 
 // ---------------------------------------------------------------------------
 // Posters
@@ -160,8 +160,11 @@ export function collectionCardHtml(item, featured, readonly = false, menuScope =
             <button type="button" class="primary" data-sell-id="${item.id}" ${hasDupe ? "" : "disabled"}>Vendre (+${sellPrice}¥)</button>
             <button type="button" class="blue" data-send-toggle="${escapeHtml(menuKey)}" ${hasDupe ? "" : "disabled"}>Envoyer</button>
             <form class="send-card-form ${isSendMode ? "is-open" : ""}" data-send-form="${escapeHtml(menuKey)}" data-send-item-id="${item.id}">
-              <input name="toUsername" placeholder="Pseudo" list="users-datalist" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true">
-              <button type="submit" class="primary">OK</button>
+              <div class="recipient-combobox">
+                <input name="toUsername" placeholder="Pseudo" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false" data-lpignore="true" data-recipient-input role="combobox" aria-autocomplete="list" aria-expanded="false" aria-label="Pseudo du destinataire">
+                <div class="recipient-suggestions" data-recipient-list role="listbox" aria-label="Utilisateurs existants" hidden></div>
+              </div>
+              <button type="submit" class="primary" data-recipient-submit disabled>OK</button>
             </form>
             ${hasDupe ? "" : `<p class="menu-hint">Action disponible avec un doublon.</p>`}
             ${!isShowcased && !canAddShowcase ? `<p class="menu-hint">Vitrine pleine.</p>` : ""}

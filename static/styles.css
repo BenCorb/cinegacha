@@ -642,8 +642,9 @@ input, select {
 
 .send-card-form {
   display: none;
-  grid-template-columns: 1fr auto;
+  grid-template-columns: minmax(0, 1fr) auto;
   gap: 6px;
+  align-items: start;
 }
 
 .send-card-form.is-open {
@@ -655,8 +656,80 @@ input, select {
   min-width: 0;
 }
 
+.recipient-combobox {
+  position: relative;
+  min-width: 0;
+}
+
+.recipient-combobox input {
+  width: 100%;
+}
+
+.recipient-suggestions {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 176px;
+  overflow-y: auto;
+  border: 2px solid #263249;
+  border-radius: 8px;
+  background: #fffaf2;
+  box-shadow: 0 5px 0 rgba(38,50,73,.2);
+  text-align: left;
+}
+
+.recipient-suggestions[hidden] {
+  display: none;
+}
+
+.recipient-suggestion,
+.recipient-suggestion-empty {
+  padding: .55rem .65rem;
+  font-size: .82rem;
+  font-weight: 850;
+  line-height: 1.15;
+}
+
+.recipient-suggestion {
+  cursor: pointer;
+}
+
+.recipient-suggestion + .recipient-suggestion,
+.recipient-suggestion-empty + .recipient-suggestion {
+  border-top: 1px solid rgba(38,50,73,.16);
+}
+
+.recipient-suggestion:hover,
+.recipient-suggestion.is-active {
+  background: #dff5ff;
+}
+
+.recipient-suggestion-empty {
+  color: var(--muted);
+  cursor: default;
+}
+
+.card:has(.recipient-suggestions:not([hidden])) {
+  z-index: 10;
+  overflow: visible;
+}
+
 .send-card-form button {
   padding-inline: .7rem;
+}
+
+@media (max-width: 700px) {
+  .recipient-suggestions {
+    max-height: 144px;
+  }
+
+  .recipient-suggestion,
+  .recipient-suggestion-empty {
+    padding: .65rem;
+    font-size: .86rem;
+  }
 }
 
 .menu-hint {

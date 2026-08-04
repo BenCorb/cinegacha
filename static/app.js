@@ -3,7 +3,7 @@ import {
   RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
-} from "./js/state.js?v=letterboxd-2";
+} from "./js/state.js?v=recipient-autocomplete-2";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
   collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
@@ -11,7 +11,7 @@ import {
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
   loginForms, nav, notificationsViewHtml, publicCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
   walletHtml,
-} from "./js/components.js?v=letterboxd-2";
+} from "./js/components.js?v=recipient-autocomplete-2";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -368,9 +368,6 @@ function renderShell(content) {
       ${content}
       ${keyModalHtml()}
       ${showBackToTop ? `<button class="back-to-top" id="backToTop" type="button" aria-label="Revenir en haut de la page">↑</button>` : ""}
-      <datalist id="users-datalist">
-        ${state.users.filter((u) => u !== state.user?.username).map((u) => `<option value="${escapeHtml(u)}">`).join("")}
-      </datalist>
     </main>
   `;
   startCreditTimer();
@@ -1022,9 +1019,15 @@ async function sendCard(event) {
   event.preventDefault();
   const form = event.currentTarget;
   const itemId = form.dataset.sendItemId;
-  const data = Object.fromEntries(new FormData(form));
+  const input = form.querySelector("[data-recipient-input]");
+  const toUsername = form.dataset.selectedRecipient || "";
+  if (!toUsername || input?.value !== toUsername) {
+    showToast("Choisis un destinataire dans la liste.", "error");
+    resetRecipientCombobox(form);
+    return;
+  }
   try {
-    const sent = await api("/api/trades", { method: "POST", body: JSON.stringify({ offerItemId: itemId, toUsername: data.toUsername }) });
+    const sent = await api("/api/trades", { method: "POST", body: JSON.stringify({ offerItemId: itemId, toUsername }) });
     handleNewAchievements(sent);
     state.activeCardMenu = null;
     state.cardMenuMode = null;
@@ -1227,8 +1230,142 @@ function setPosterMenu(menuKey, open, showSend = false) {
   document.querySelectorAll("[data-send-form]").forEach((form) => {
     const isTarget = form.dataset.sendForm === menuKey;
     form.classList.toggle("is-open", Boolean(open && showSend && isTarget));
-    if (!open || !showSend || !isTarget) form.reset();
+    if (!open || !showSend || !isTarget) {
+      form.reset();
+      resetRecipientCombobox(form);
+    }
   });
+}
+
+function recipientMatches(query) {
+  const normalizedQuery = query.trim().toLowerCase();
+  const currentUsername = (state.user?.username || "").toLowerCase();
+  if (!normalizedQuery) return [];
+  return state.users
+    .filter((username) => {
+      const normalizedUsername = username.toLowerCase();
+      return normalizedUsername !== currentUsername && normalizedUsername.includes(normalizedQuery);
+    })
+    .slice(0, 8);
+}
+
+function resetRecipientCombobox(form) {
+  const input = form.querySelector("[data-recipient-input]");
+  const list = form.querySelector("[data-recipient-list]");
+  const submit = form.querySelector("[data-recipient-submit]");
+  delete form.dataset.selectedRecipient;
+  if (submit) submit.disabled = true;
+  if (input) {
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+  }
+  if (list) {
+    list.hidden = true;
+    list.innerHTML = "";
+  }
+}
+
+function bindRecipientCombobox(form, formIndex) {
+  const input = form.querySelector("[data-recipient-input]");
+  const list = form.querySelector("[data-recipient-list]");
+  const submit = form.querySelector("[data-recipient-submit]");
+  if (!input || !list || !submit) return;
+
+  const listId = `recipient-list-${formIndex}`;
+  list.id = listId;
+  input.setAttribute("aria-controls", listId);
+  let matches = [];
+  let activeIndex = -1;
+
+  const closeSuggestions = () => {
+    list.hidden = true;
+    input.setAttribute("aria-expanded", "false");
+    input.removeAttribute("aria-activedescendant");
+    activeIndex = -1;
+  };
+
+  const setActiveOption = (nextIndex) => {
+    if (!matches.length) return;
+    activeIndex = (nextIndex + matches.length) % matches.length;
+    list.querySelectorAll("[data-recipient-option]").forEach((option, index) => {
+      const isActive = index === activeIndex;
+      option.classList.toggle("is-active", isActive);
+      option.setAttribute("aria-selected", isActive ? "true" : "false");
+      if (isActive) input.setAttribute("aria-activedescendant", option.id);
+    });
+    list.querySelector(".is-active")?.scrollIntoView({ block: "nearest" });
+  };
+
+  const selectRecipient = (username) => {
+    input.value = username;
+    form.dataset.selectedRecipient = username;
+    submit.disabled = false;
+    closeSuggestions();
+    input.focus();
+  };
+
+  const renderSuggestions = () => {
+    delete form.dataset.selectedRecipient;
+    submit.disabled = true;
+    matches = recipientMatches(input.value);
+    activeIndex = -1;
+    input.removeAttribute("aria-activedescendant");
+
+    if (!input.value.trim()) {
+      closeSuggestions();
+      list.innerHTML = "";
+      return;
+    }
+
+    if (!matches.length) {
+      list.innerHTML = `<div class="recipient-suggestion-empty" role="option" aria-disabled="true">Aucun utilisateur trouvé</div>`;
+    } else {
+      list.innerHTML = matches.map((username, index) => `
+        <div class="recipient-suggestion" id="${listId}-option-${index}" role="option" aria-selected="false" data-recipient-option data-username="${escapeHtml(username)}">${escapeHtml(username)}</div>
+      `).join("");
+    }
+    list.hidden = false;
+    input.setAttribute("aria-expanded", "true");
+  };
+
+  input.addEventListener("input", renderSuggestions);
+  input.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      closeSuggestions();
+      return;
+    }
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (list.hidden && input.value.trim()) renderSuggestions();
+      if (!matches.length) return;
+      setActiveOption(event.key === "ArrowDown" ? activeIndex + 1 : activeIndex - 1);
+      return;
+    }
+    if (event.key === "Enter" && !list.hidden) {
+      event.preventDefault();
+      if (activeIndex >= 0) selectRecipient(matches[activeIndex]);
+    }
+  });
+  input.addEventListener("blur", () => setTimeout(closeSuggestions, 0));
+  list.addEventListener("pointerdown", (event) => {
+    const option = event.target.closest("[data-recipient-option]");
+    if (!option) return;
+    // Garde le focus dans le champ jusqu'au clic complet. Masquer la liste dès
+    // pointerdown ferait retomber le clic sur un bouton placé dessous sur mobile.
+    event.preventDefault();
+  });
+  list.addEventListener("click", (event) => {
+    const option = event.target.closest("[data-recipient-option]");
+    if (!option) return;
+    selectRecipient(option.dataset.username);
+  });
+  list.addEventListener("pointermove", (event) => {
+    const option = event.target.closest("[data-recipient-option]");
+    if (!option) return;
+    const optionIndex = [...list.querySelectorAll("[data-recipient-option]")].indexOf(option);
+    if (optionIndex >= 0 && optionIndex !== activeIndex) setActiveOption(optionIndex);
+  });
+  resetRecipientCombobox(form);
 }
 
 function bindInteractiveCards() {
@@ -1278,7 +1415,8 @@ function bindInteractiveCards() {
       setPosterMenu(menuKey, true, shouldOpen);
     });
   });
-  document.querySelectorAll("[data-send-form]").forEach((form) => {
+  document.querySelectorAll("[data-send-form]").forEach((form, formIndex) => {
+    bindRecipientCombobox(form, formIndex);
     form.addEventListener("submit", sendCard);
     form.addEventListener("click", (event) => event.stopPropagation());
   });
