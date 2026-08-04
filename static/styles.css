@@ -565,7 +565,9 @@ input, select {
 }
 
 .poster-button:hover {
-  filter: brightness(1.04);
+  transform: none;
+  box-shadow: none;
+  filter: none;
 }
 
 .poster-button:active {
