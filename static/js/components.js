@@ -167,7 +167,6 @@ export function collectionCardHtml(item, featured, readonly = false, menuScope =
               <button type="submit" class="primary" data-recipient-submit disabled>OK</button>
             </form>
             ${hasDupe ? "" : `<p class="menu-hint">Action disponible avec un doublon.</p>`}
-            ${!isShowcased && !canAddShowcase ? `<p class="menu-hint">Vitrine pleine.</p>` : ""}
           </div>
         ` : ""}
       </div>

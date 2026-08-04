@@ -607,19 +607,37 @@ input, select {
   left: 50%;
   top: 50%;
   width: min(230px, calc(100% - 18px));
-  transform: translate(-50%, -50%);
+  transform: translate(-50%, calc(-50% + 8px)) scale(.96);
+  transform-origin: center;
   z-index: 5;
   border: 2px solid #263249;
   border-radius: 8px;
   background: rgba(255,250,242,.96);
   box-shadow: 0 6px 0 rgba(38,50,73,.2);
   padding: 10px;
-  display: none;
+  display: grid;
   gap: 8px;
+  opacity: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition:
+    opacity .16s ease,
+    transform .18s cubic-bezier(.2, .8, .2, 1),
+    visibility 0s linear .18s;
 }
 
 .poster-menu.is-open {
-  display: grid;
+  opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
+  transform: translate(-50%, -50%) scale(1);
+  transition-delay: 0s;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .poster-menu {
+    transition: none;
+  }
 }
 
 .poster-menu button {
