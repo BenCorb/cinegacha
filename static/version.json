@@ -1,7 +1,13 @@
 {
-  "version": "1.4",
+  "version": "1.5",
   "license": "GPL-3.0-or-later",
   "changelog": [
+    {
+      "version": "1.5",
+      "changes": [
+        "Ajout d'un centre de notifications pour les cartes reçues et les succès débloqués"
+      ]
+    },
     {
       "version": "1.4",
       "changes": [
