@@ -1501,6 +1501,56 @@ input, select {
   gap: 10px;
 }
 
+.letterboxd-form {
+  padding: 14px;
+  border: 2px solid rgba(38,50,73,.14);
+  border-radius: 10px;
+  background: rgba(255,255,255,.54);
+}
+
+.letterboxd-form label {
+  font-weight: 900;
+}
+
+.letterboxd-form .muted-copy {
+  margin: -8px 0 0;
+  font-size: .84rem;
+}
+
+.letterboxd-field {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  border: 2px solid rgba(38,50,73,.22);
+  border-radius: 8px;
+  background: white;
+}
+
+.letterboxd-field:focus-within {
+  border-color: var(--blue);
+}
+
+.letterboxd-field span {
+  padding-left: 10px;
+  color: var(--muted);
+  font-size: .82rem;
+  font-weight: 900;
+  white-space: nowrap;
+}
+
+.letterboxd-field input {
+  min-width: 0;
+  border: 0;
+  box-shadow: none;
+  padding-left: 2px;
+}
+
+.letterboxd-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
 .credits-panel {
   display: grid;
   gap: 16px;
@@ -1740,6 +1790,35 @@ input, select {
 
 .public-summary {
   margin: 0;
+}
+
+.public-profile-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.public-profile-line h2 {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+.letterboxd-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: linear-gradient(135deg, rgba(255,246,201,.96), rgba(205,245,225,.96));
+  color: var(--ink);
+  text-decoration: none;
+  transition: transform .16s ease, box-shadow .16s ease, filter .16s ease;
+}
+
+.letterboxd-link:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 0 rgba(38,50,73,.2);
+  filter: brightness(1.02);
 }
 
 .public-grid {

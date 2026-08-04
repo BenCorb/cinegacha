@@ -89,7 +89,8 @@ def init_db() -> None:
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 username TEXT NOT NULL UNIQUE COLLATE NOCASE,
                 key_hash TEXT NOT NULL,
-                created_at INTEGER NOT NULL
+                created_at INTEGER NOT NULL,
+                letterboxd_username TEXT
             );
 
             CREATE TABLE IF NOT EXISTS inventory (
@@ -162,6 +163,8 @@ def init_db() -> None:
                 "UPDATE users SET credits = ?, last_credit_refill_at = ? WHERE last_credit_refill_at = 0",
                 (STARTING_CREDITS, ts),
             )
+        if "letterboxd_username" not in user_cols:
+            conn.execute("ALTER TABLE users ADD COLUMN letterboxd_username TEXT")
         cs_cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_state)").fetchall()}
         if "favorite" not in cs_cols:
             conn.execute(

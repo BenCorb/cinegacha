@@ -208,6 +208,7 @@ def user_payload(user: sqlite3.Row | None) -> dict | None:
     ts = now()
     return {
         "username": user["username"],
+        "letterboxdUsername": user["letterboxd_username"],
         "credits": credits,
         "nextCreditAt": None if credits >= REFILL_CAP else next_full_hour(ts),
         "refillCap": REFILL_CAP,

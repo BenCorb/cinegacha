@@ -3,7 +3,7 @@ import {
   RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
-} from "./js/state.js?v=notifications-6";
+} from "./js/state.js?v=letterboxd-2";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
   collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
@@ -11,7 +11,7 @@ import {
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
   loginForms, nav, notificationsViewHtml, publicCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
   walletHtml,
-} from "./js/components.js?v=notifications-6";
+} from "./js/components.js?v=letterboxd-2";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -877,6 +877,8 @@ function renderLogin() {
     </section>
   `);
   if (state.user) {
+    $("#letterboxdProfile").addEventListener("submit", updateLetterboxdProfile);
+    $("#unlinkLetterboxd")?.addEventListener("click", () => saveLetterboxdUsername(""));
     $("#resetCollection").addEventListener("click", resetCollection);
     $("#regenerateKey").addEventListener("click", regenerateConnectionKey);
     $("#logout").addEventListener("click", () => {
@@ -900,6 +902,26 @@ function renderLogin() {
     });
   } else {
     bindLogin();
+  }
+}
+
+async function updateLetterboxdProfile(event) {
+  event.preventDefault();
+  const username = new FormData(event.currentTarget).get("letterboxdUsername");
+  await saveLetterboxdUsername(username);
+}
+
+async function saveLetterboxdUsername(username) {
+  try {
+    const updated = await api("/api/profile/letterboxd", {
+      method: "POST",
+      body: JSON.stringify({ username }),
+    });
+    mergeUser(updated);
+    showToast(updated.letterboxdUsername ? "Profil Letterboxd enregistré." : "Profil Letterboxd supprimé.", "success");
+    renderLogin();
+  } catch (e) {
+    showToast(e.message, "error");
   }
 }
 

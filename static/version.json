@@ -5,7 +5,8 @@
     {
       "version": "1.5",
       "changes": [
-        "Ajout d'un centre de notifications pour les cartes reçues et les succès débloqués"
+        "Ajout d'un centre de notifications pour les cartes reçues et les succès débloqués",
+        "Ajout d'un lien Letterboxd sur les collections publiques"
       ]
     },
     {

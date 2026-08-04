@@ -2,7 +2,7 @@ import {
   state,
   RARITIES, RARITY_RANK, SELL_PRICES, SHOWCASE_LIMIT,
   creditTimerText, escapeHtml, formatCredits, statsHtml,
-} from "./state.js?v=notifications-6";
+} from "./state.js?v=letterboxd-2";
 
 // ---------------------------------------------------------------------------
 // Posters
@@ -420,11 +420,21 @@ export function publicCollectionHtml(profile) {
     total: state.dataset?.count || 0,
     percent: 0, seen: 0, favorites: 0, watchlist: 0,
   };
+  const letterboxdUrl = profile.letterboxdUsername
+    ? `https://letterboxd.com/${encodeURIComponent(profile.letterboxdUsername)}/`
+    : null;
   return `
     <div class="public-heading">
       <div>
         <p class="eyebrow">Collection de</p>
-        <h2>${escapeHtml(profile.username)}</h2>
+        <div class="public-profile-line">
+          <h2>${escapeHtml(profile.username)}</h2>
+          ${letterboxdUrl ? `
+            <a class="credits-stamp letterboxd-link" href="${escapeHtml(letterboxdUrl)}" target="_blank" rel="noopener noreferrer">
+              Letterboxd
+            </a>
+          ` : ""}
+        </div>
       </div>
       <span class="credits-stamp">${Number(summary.percent || 0).toFixed(1)}%</span>
     </div>
@@ -621,6 +631,7 @@ export function loginForms() {
 }
 
 export function accountPanelHtml() {
+  const letterboxdUsername = state.user.letterboxdUsername || "";
   return `
     <div class="account-grid">
       <section class="panel stack account-panel">
@@ -629,6 +640,18 @@ export function accountPanelHtml() {
           <h1>${escapeHtml(state.user.username)}</h1>
           <p class="muted-copy">Ta session est stockée dans ce navigateur.</p>
         </div>
+        <form id="letterboxdProfile" class="letterboxd-form stack" autocomplete="off">
+          <label for="letterboxdUsername">Pseudo Letterboxd</label>
+          <p class="muted-copy">Ajoute ton profil pour le partager avec les joueurs qui consultent ta collection.</p>
+          <div class="letterboxd-field">
+            <span aria-hidden="true">letterboxd.com/</span>
+            <input id="letterboxdUsername" name="letterboxdUsername" value="${escapeHtml(letterboxdUsername)}" placeholder="ton-pseudo" maxlength="64" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
+          </div>
+          <div class="letterboxd-actions">
+            <button class="blue" type="submit">Enregistrer</button>
+            ${letterboxdUsername ? `<button id="unlinkLetterboxd" class="ghost" type="button">Supprimer le lien</button>` : ""}
+          </div>
+        </form>
         <div class="account-actions">
           <button id="regenerateKey" class="blue">Regénérer la clé</button>
           <button id="resetCollection" class="primary">Réinitialiser la collection</button>
@@ -696,7 +719,7 @@ export function creditsPanelHtml() {
       </div>
       <div class="privacy-notice">
         <h3>Confidentialité</h3>
-        <p>CinéGacha enregistre uniquement les données nécessaires au jeu : pseudo, clé de connexion hashée, collection, crédits, échanges, notifications, succès, favoris, watchlist et films vus.</p>
+        <p>CinéGacha enregistre uniquement les données nécessaires au jeu : pseudo, pseudo Letterboxd facultatif, clé de connexion hashée, collection, crédits, échanges, notifications, succès, favoris, watchlist et films vus.</p>
         <p>Ces données sont stockées dans la base SQLite du serveur. Elles servent à retrouver ton compte, afficher ta progression, gérer les échanges et notifications, et maintenir le classement.</p>
         <p>Pour toute question, demande d'accès ou suppression de compte, contacte <a href="mailto:cinegacha.app@pm.me">cinegacha.app@pm.me</a>.</p>
       </div>
