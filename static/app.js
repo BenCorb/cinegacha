@@ -3,15 +3,15 @@ import {
   RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
-} from "./js/state.js";
+} from "./js/state.js?v=notifications-5";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
   collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
   creditsPanelHtml, dropRatesHtml, filterCountText, filteredCollection,
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
-  loginForms, nav, publicCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
+  loginForms, nav, notificationsViewHtml, publicCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
   walletHtml,
-} from "./js/components.js";
+} from "./js/components.js?v=notifications-5";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -25,6 +25,11 @@ const appToastQueue = [];
 let appToastTimer = null;
 const ROLL_COUNTS = [1, 5, 10];
 let achievementToastTimer = null;
+let notificationPollId = null;
+let notificationCountRefreshInFlight = false;
+let notificationLoadPromise = null;
+let notificationClearInFlight = false;
+const NOTIFICATION_POLL_MS = 30_000;
 const RESULT_SWIPE_LOCK_DISTANCE = 12;
 const RESULT_SWIPE_RATIO = 0.32;
 const RESULT_SWIPE_MAX_DISTANCE = 96;
@@ -137,8 +142,129 @@ function handleNewAchievements(data) {
   if (!Array.isArray(newAchs) || !newAchs.length) return;
   state.achievementQueue.push(...newAchs);
   processAchievementQueue();
+  refreshUnreadNotificationCount();
   // Invalider le cache achievements pour rafraîchir la vue si nécessaire
   state.achievements = [];
+}
+
+// ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+function updateNotificationBadge() {
+  const count = Number(state.unreadNotificationCount || 0);
+  const badge = document.querySelector(".notification-badge");
+  const button = document.querySelector('[data-view="notifications"]');
+  if (!badge || !button) return;
+  badge.textContent = count > 99 ? "99+" : String(count);
+  badge.classList.toggle("is-empty", count === 0);
+  if (count) button.setAttribute("aria-label", `Notifications, ${count} non lue${count > 1 ? "s" : ""}`);
+  else button.removeAttribute("aria-label");
+}
+
+async function refreshUnreadNotificationCount() {
+  if (!state.user || document.hidden || notificationCountRefreshInFlight) return;
+  notificationCountRefreshInFlight = true;
+  try {
+    const data = await api("/api/notifications/unread-count");
+    state.unreadNotificationCount = Number(data.unreadCount || 0);
+    updateNotificationBadge();
+  } catch (error) {
+    if (error.status === 401) return;
+  } finally {
+    notificationCountRefreshInFlight = false;
+  }
+}
+
+async function markNotificationsRead(notificationIds) {
+  let unreadCount = state.unreadNotificationCount;
+  for (let index = 0; index < notificationIds.length; index += 500) {
+    const chunk = notificationIds.slice(index, index + 500);
+    const data = await api("/api/notifications/read", {
+      method: "POST",
+      body: JSON.stringify({ ids: chunk }),
+    });
+    const markedIds = new Set(chunk);
+    state.notifications.forEach((notification) => {
+      if (markedIds.has(notification.id)) notification.read = true;
+    });
+    unreadCount = Number(data.unreadCount || 0);
+  }
+  state.unreadNotificationCount = unreadCount;
+  updateNotificationBadge();
+}
+
+function loadNotifications({ showErrors = true } = {}) {
+  if (!state.user) return Promise.resolve();
+  if (notificationLoadPromise) return notificationLoadPromise;
+  notificationLoadPromise = api("/api/notifications")
+    .then(async (data) => {
+      state.notifications = Array.isArray(data.notifications) ? data.notifications : [];
+      state.notificationsLoaded = true;
+      state.unreadNotificationCount = Number(data.unreadCount || 0);
+      const unreadIds = state.notifications.filter((item) => !item.read).map((item) => item.id);
+      if (state.view === "notifications") {
+        state.notificationHighlightIds = [...new Set([
+          ...state.notificationHighlightIds,
+          ...unreadIds,
+        ])];
+        renderNotificationsView();
+      } else {
+        updateNotificationBadge();
+      }
+      if (state.view === "notifications" && unreadIds.length) {
+        try {
+          await markNotificationsRead(unreadIds);
+        } catch (error) {
+          if (showErrors) showToast(error.message, "error");
+          await refreshUnreadNotificationCount();
+        }
+      }
+    })
+    .catch((error) => {
+      if (showErrors) showToast(error.message, "error");
+    })
+    .finally(() => { notificationLoadPromise = null; });
+  return notificationLoadPromise;
+}
+
+async function clearNotifications() {
+  if (notificationClearInFlight) return;
+  notificationClearInFlight = true;
+  const button = $("#clearNotifications");
+  if (button) button.disabled = true;
+  try {
+    const data = await api("/api/notifications/clear", { method: "POST", body: "{}" });
+    state.notifications = [];
+    state.notificationsLoaded = true;
+    state.unreadNotificationCount = Number(data.unreadCount || 0);
+    state.notificationHighlightIds = [];
+    renderNotificationsView();
+    const deleted = Number(data.deleted || 0);
+    showToast(`${deleted} notification${deleted > 1 ? "s" : ""} supprimée${deleted > 1 ? "s" : ""}.`, "success");
+  } catch (error) {
+    showToast(error.message, "error");
+  } finally {
+    notificationClearInFlight = false;
+    const currentButton = $("#clearNotifications");
+    if (currentButton) currentButton.disabled = false;
+  }
+}
+
+function renderNotificationsView() {
+  renderShell(notificationsViewHtml());
+  $("#clearNotifications")?.addEventListener("click", clearNotifications);
+}
+
+function startNotificationPolling() {
+  if (notificationPollId) clearInterval(notificationPollId);
+  notificationPollId = null;
+  if (!state.user) return;
+  notificationPollId = setInterval(() => {
+    if (document.hidden) return;
+    if (state.view === "notifications") loadNotifications({ showErrors: false });
+    else refreshUnreadNotificationCount();
+  }, NOTIFICATION_POLL_MS);
 }
 
 function updateCreditTimer() {
@@ -183,8 +309,9 @@ async function refresh({ shouldRender = true } = {}) {
       api("/api/users"),
       needsLeaderboard  ? api("/api/leaderboard")  : Promise.resolve(null),
       needsAchievements ? api("/api/achievements") : Promise.resolve(null),
+      api("/api/notifications/unread-count"),
     ];
-    const [collection, users, leaderboardData, achievementsData] = await Promise.all(requests);
+    const [collection, users, leaderboardData, achievementsData, notificationData] = await Promise.all(requests);
     state.collection = collection.items;
     state.collectionSummary = collection.summary || null;
     syncResultItems(state.collection);
@@ -192,6 +319,7 @@ async function refresh({ shouldRender = true } = {}) {
     state.users = users.users;
     if (leaderboardData)  state.leaderboard  = leaderboardData.leaderboard || [];
     if (achievementsData) state.achievements = achievementsData.achievements || [];
+    state.unreadNotificationCount = Number(notificationData?.unreadCount || 0);
     if (shouldRender) render();
   } catch (error) {
     if (error.status === 401) {
@@ -204,6 +332,10 @@ async function refresh({ shouldRender = true } = {}) {
       state.leaderboard = [];
       state.achievements = [];
       state.achievementQueue = [];
+      state.notifications = [];
+      state.notificationsLoaded = false;
+      state.unreadNotificationCount = 0;
+      state.notificationHighlightIds = [];
       state.publicCollection = null;
       state.pendingRoll = null;
       state.result = null;
@@ -242,11 +374,16 @@ function renderShell(content) {
     </main>
   `;
   startCreditTimer();
+  startNotificationPolling();
   $("#refreshApp")?.addEventListener("click", () => window.location.reload());
   bindKeyModal();
   document.querySelectorAll("[data-view]").forEach((button) => {
     button.addEventListener("click", () => {
+      const previousView = state.view;
       state.view = button.dataset.view;
+      if (previousView === "notifications" && state.view !== "notifications") {
+        state.notificationHighlightIds = [];
+      }
       // Bascule immediate depuis le cache : pas d'attente reseau au changement d'onglet.
       render();
       // Donnees specifiques a la vue, rafraichies en arriere-plan (non bloquant).
@@ -756,6 +893,10 @@ function renderLogin() {
       state.leaderboard = [];
       state.achievements = [];
       state.achievementQueue = [];
+      state.notifications = [];
+      state.notificationsLoaded = false;
+      state.unreadNotificationCount = 0;
+      state.notificationHighlightIds = [];
       state.publicCollection = null;
       state.pendingRoll = null;
       state.result = null;
@@ -815,7 +956,7 @@ async function regenerateConnectionKey() {
 }
 
 async function resetCollection() {
-  if (!confirm("Reset toute ta collection, tes cartes vues et tes échanges ?")) return;
+  if (!confirm("Reset toute ta collection, tes cartes vues, tes échanges, tes succès et tes notifications ?")) return;
   try {
     const reset = await api("/api/collection/reset", { method: "POST", body: "{}" });
     mergeUser(reset);
@@ -824,6 +965,10 @@ async function resetCollection() {
     state.trades      = [];
     state.achievements = [];
     state.achievementQueue = [];
+    state.notifications = [];
+    state.notificationsLoaded = true;
+    state.unreadNotificationCount = 0;
+    state.notificationHighlightIds = [];
     state.result      = null;
     state.resultIndex = 0;
     state.pendingRoll = null;
@@ -1147,6 +1292,16 @@ function renderAchievements() {
 }
 
 // ---------------------------------------------------------------------------
+// Vue Notifications
+// ---------------------------------------------------------------------------
+
+function renderNotifications() {
+  if (requireLogin()) return;
+  renderNotificationsView();
+  loadNotifications();
+}
+
+// ---------------------------------------------------------------------------
 // Rendu principal
 // ---------------------------------------------------------------------------
 
@@ -1154,6 +1309,7 @@ function render() {
   if      (state.view === "collection")   renderCollection();
   else if (state.view === "leaderboard")  renderLeaderboard();
   else if (state.view === "achievements") renderAchievements();
+  else if (state.view === "notifications") renderNotifications();
   else if (state.view === "login")        renderLogin();
   else                                    renderGacha();
   document.body.classList.toggle("is-result-open", state.view === "gacha" && Boolean(state.result));
@@ -1165,6 +1321,12 @@ document.addEventListener("click", (event) => {
   state.activeCardMenu = null;
   state.cardMenuMode = null;
   setPosterMenu("", false);
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden || !state.user) return;
+  if (state.view === "notifications") loadNotifications({ showErrors: false });
+  else refreshUnreadNotificationCount();
 });
 
 loadRelease().finally(() => refresh());

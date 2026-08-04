@@ -503,6 +503,36 @@ def _metric_value(metrics: dict, ach: dict) -> int:
     return int(metrics.get(ach["metric"], 0))
 
 
+def create_notification(
+    conn: sqlite3.Connection,
+    user_id: int,
+    notification_type: str,
+    source_id: str,
+    payload: dict,
+    *,
+    actor_user_id: int | None = None,
+    created_at: int | None = None,
+) -> bool:
+    """Cree une notification idempotente dans la transaction courante."""
+    inserted = conn.execute(
+        """
+        INSERT OR IGNORE INTO notifications
+            (id, user_id, type, source_id, actor_user_id, payload_json, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            secrets.token_urlsafe(12),
+            user_id,
+            notification_type,
+            source_id,
+            actor_user_id,
+            json.dumps(payload, ensure_ascii=False, separators=(",", ":")),
+            created_at if created_at is not None else now(),
+        ),
+    )
+    return inserted.rowcount > 0
+
+
 def check_and_unlock_achievements(conn: sqlite3.Connection, user_id: int) -> list[dict]:
     already = {
         row["achievement_id"]
@@ -528,6 +558,21 @@ def check_and_unlock_achievements(conn: sqlite3.Connection, user_id: int) -> lis
         conn.execute("UPDATE users SET credits = credits + ? WHERE id = ?", (ach["reward"], user_id))
         # La recompense peut faire franchir le seuil d'un succes "credits" suivant.
         metrics["credits"] += ach["reward"]
+        create_notification(
+            conn,
+            user_id,
+            "achievement_unlocked",
+            ach_id,
+            {
+                "achievement": {
+                    "id": ach_id,
+                    "name": ach["name"],
+                    "description": ach["description"],
+                    "reward": ach["reward"],
+                }
+            },
+            created_at=ts,
+        )
         newly.append({**ach, "id": ach_id, "unlockedAt": ts})
     return newly
 
@@ -556,6 +601,47 @@ def achievements_for_user(conn: sqlite3.Connection, user_id: int) -> list[dict]:
             entry["unlockedAt"] = unlocked[ach_id]
         result.append(entry)
     return result
+
+
+# ---------------------------------------------------------------------------
+# Notifications
+# ---------------------------------------------------------------------------
+
+def notification_payload(row: sqlite3.Row) -> dict:
+    try:
+        data = json.loads(row["payload_json"] or "{}")
+    except (TypeError, ValueError, json.JSONDecodeError):
+        data = {}
+    return {
+        "id": row["id"],
+        "type": row["type"],
+        "actorUsername": row["actor_username"],
+        "data": data,
+        "read": row["read_at"] is not None,
+        "readAt": row["read_at"],
+        "createdAt": row["created_at"],
+    }
+
+
+def notifications_for_user(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+    rows = conn.execute(
+        """
+        SELECT n.*, actor.username AS actor_username
+        FROM notifications n
+        LEFT JOIN users actor ON actor.id = n.actor_user_id
+        WHERE n.user_id = ?
+        ORDER BY n.created_at DESC, n.id DESC
+        """,
+        (user_id,),
+    ).fetchall()
+    return [notification_payload(row) for row in rows]
+
+
+def unread_notifications_count(conn: sqlite3.Connection, user_id: int) -> int:
+    return int(conn.execute(
+        "SELECT COUNT(*) FROM notifications WHERE user_id = ? AND read_at IS NULL",
+        (user_id,),
+    ).fetchone()[0])
 
 
 # ---------------------------------------------------------------------------

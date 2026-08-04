@@ -165,6 +165,32 @@ input, select {
   align-items: center;
 }
 
+.nav button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+}
+
+.notification-badge {
+  min-width: 21px;
+  height: 21px;
+  padding: 0 5px;
+  border: 2px solid rgba(38,50,73,.45);
+  border-radius: 999px;
+  display: inline-grid;
+  place-items: center;
+  background: var(--red);
+  color: white;
+  font-size: .68rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.notification-badge.is-empty {
+  display: none;
+}
+
 .nav button.active {
   background: #263249;
   color: white;
@@ -2047,6 +2073,109 @@ input, select {
 }
 
 
+/* ===== Notifications ===== */
+
+.notification-list {
+  display: grid;
+  gap: 9px;
+}
+
+.notification-row {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  border: 2px solid rgba(38,50,73,.12);
+  border-radius: 8px;
+  background: rgba(255,255,255,.68);
+  padding: 11px 12px;
+  transition: background .16s ease, border-color .16s ease, box-shadow .16s ease;
+}
+
+.notification-row.is-unread {
+  border-color: rgba(239,79,98,.55);
+  background: linear-gradient(135deg, rgba(255,238,243,.96), rgba(255,250,242,.94));
+  box-shadow: inset 4px 0 0 var(--red);
+}
+
+.notification-icon {
+  width: 34px;
+  height: 34px;
+  border: 2px solid rgba(38,50,73,.28);
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+  font-weight: 900;
+}
+
+.notification-icon-card {
+  border-radius: 7px;
+  background: var(--blue);
+}
+
+.notification-icon-card::after {
+  content: "";
+  width: 17px;
+  height: 12px;
+  border: 2px solid #263249;
+  border-radius: 3px;
+  background: rgba(255,255,255,.74);
+  transform: rotate(-7deg);
+}
+
+.notification-icon-achievement {
+  border-radius: 50%;
+  background: var(--yellow);
+}
+
+.notification-icon-achievement::after {
+  content: "★";
+  font-size: 1rem;
+}
+
+.notification-content {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.notification-content strong {
+  overflow-wrap: anywhere;
+  font-size: .9rem;
+}
+
+.notification-content > span:not(.notification-kind) {
+  color: var(--muted);
+  font-size: .78rem;
+  font-weight: 800;
+}
+
+.notification-kind {
+  color: #b64b62;
+  font-size: .68rem;
+  font-weight: 900;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+}
+
+.notification-row time {
+  color: var(--muted);
+  font-size: .72rem;
+  font-weight: 800;
+  white-space: nowrap;
+}
+
+.notifications-panel .empty-state {
+  padding-block: 64px;
+}
+
+.notification-clear {
+  align-self: center;
+  color: #b64b62;
+  white-space: nowrap;
+}
+
+
 /* ===== Échanges ===== */
 
 .trade-row {
@@ -2114,10 +2243,22 @@ input, select {
     grid-column: 1 / -1;
     width: 100%;
     display: grid;
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: repeat(3, minmax(0, 1fr));
   }
   .nav button {
     min-width: 0;
+  }
+
+  .notification-row {
+    grid-template-columns: 38px minmax(0, 1fr);
+  }
+
+  .notification-row time {
+    grid-column: 2;
+  }
+
+  .notifications-panel .section-heading {
+    align-items: center;
   }
 }
 
@@ -2161,6 +2302,16 @@ input, select {
     border-radius: 7px;
     padding: .42rem .25rem;
     font-size: .8rem;
+  }
+
+  .notifications-panel .section-heading {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr);
+    justify-content: stretch;
+  }
+
+  .notification-clear {
+    width: 100%;
   }
 
   .showcase-slots,

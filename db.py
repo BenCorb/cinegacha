@@ -132,6 +132,20 @@ def init_db() -> None:
                 PRIMARY KEY (user_id, item_id),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
+
+            CREATE TABLE IF NOT EXISTS notifications (
+                id TEXT PRIMARY KEY,
+                user_id INTEGER NOT NULL,
+                type TEXT NOT NULL,
+                source_id TEXT NOT NULL,
+                actor_user_id INTEGER,
+                payload_json TEXT NOT NULL DEFAULT '{}',
+                read_at INTEGER,
+                created_at INTEGER NOT NULL,
+                FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE,
+                FOREIGN KEY (actor_user_id) REFERENCES users(id) ON DELETE CASCADE,
+                UNIQUE (user_id, type, source_id)
+            );
             """
         )
         # Migrations additives — safe sur une DB existante
@@ -197,6 +211,11 @@ def init_db() -> None:
             CREATE INDEX IF NOT EXISTS idx_trades_to        ON trades(to_user_id);
             CREATE INDEX IF NOT EXISTS idx_cstate_user      ON collection_state(user_id);
             CREATE INDEX IF NOT EXISTS idx_achievements_user ON user_achievements(user_id);
+            CREATE INDEX IF NOT EXISTS idx_notifications_user_created
+                ON notifications(user_id, created_at DESC);
+            CREATE INDEX IF NOT EXISTS idx_notifications_user_unread
+                ON notifications(user_id, created_at DESC)
+                WHERE read_at IS NULL;
             CREATE UNIQUE INDEX IF NOT EXISTS idx_cstate_showcase_slot
                 ON collection_state(user_id, showcase_slot)
                 WHERE showcase_slot IS NOT NULL;

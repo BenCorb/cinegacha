@@ -35,16 +35,19 @@ from game import (
     add_item,
     check_and_unlock_achievements,
     collection_summary,
+    create_notification,
     inventory_count,
     item_payload,
     leaderboard,
     next_full_hour,
+    notifications_for_user,
     now,
     owned_collection_for,
     pick_weighted_item,
     poster_svg,
     refill_user,
     trade_payload,
+    unread_notifications_count,
     user_payload,
 )
 from db import (
@@ -372,6 +375,18 @@ class Handler(SimpleHTTPRequestHandler):
                     self.send_json({"achievements": achievements_for_user(conn, user["id"])})
                     return
 
+                if parsed.path == "/api/notifications/unread-count":
+                    self.send_json({"unreadCount": unread_notifications_count(conn, user["id"])})
+                    return
+
+                if parsed.path == "/api/notifications":
+                    notifications = notifications_for_user(conn, user["id"])
+                    self.send_json({
+                        "notifications": notifications,
+                        "unreadCount": unread_notifications_count(conn, user["id"]),
+                    })
+                    return
+
                 if parsed.path == "/api/trades":
                     rows = conn.execute(
                         """
@@ -557,6 +572,7 @@ class Handler(SimpleHTTPRequestHandler):
                     conn.execute("DELETE FROM collection_state WHERE user_id = ?", (user["id"],))
                     conn.execute("DELETE FROM rolls WHERE user_id = ?", (user["id"],))
                     conn.execute("DELETE FROM user_achievements WHERE user_id = ?", (user["id"],))
+                    conn.execute("DELETE FROM notifications WHERE user_id = ?", (user["id"],))
                     conn.execute(
                         "DELETE FROM trades WHERE from_user_id = ? OR to_user_id = ?",
                         (user["id"], user["id"]),
@@ -573,6 +589,45 @@ class Handler(SimpleHTTPRequestHandler):
                     user["last_credit_refill_at"] = ts
                     user["total_sells"] = 0
                     self.send_json({"ok": True, **(user_payload(user) or {})})
+                    return
+
+                # --- Vider les notifications ---
+                if parsed.path == "/api/notifications/clear":
+                    result = conn.execute(
+                        "DELETE FROM notifications WHERE user_id = ?",
+                        (user["id"],),
+                    )
+                    self.send_json({"deleted": result.rowcount, "unreadCount": 0})
+                    return
+
+                # --- Marquer des notifications comme lues ---
+                if parsed.path == "/api/notifications/read":
+                    notification_ids = body.get("ids")
+                    if not isinstance(notification_ids, list):
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "Liste de notifications invalide.")
+                    notification_ids = list(dict.fromkeys(
+                        value for value in notification_ids
+                        if isinstance(value, str) and value
+                    ))
+                    if len(notification_ids) > 500:
+                        raise ApiError(HTTPStatus.BAD_REQUEST, "Trop de notifications a marquer.")
+                    updated = 0
+                    if notification_ids:
+                        placeholders = ",".join("?" for _ in notification_ids)
+                        result = conn.execute(
+                            f"""
+                            UPDATE notifications
+                            SET read_at = ?
+                            WHERE user_id = ? AND read_at IS NULL
+                              AND id IN ({placeholders})
+                            """,
+                            (now(), user["id"], *notification_ids),
+                        )
+                        updated = result.rowcount
+                    self.send_json({
+                        "updated": updated,
+                        "unreadCount": unread_notifications_count(conn, user["id"]),
+                    })
                     return
 
                 # --- Marquer comme vu ---
@@ -692,6 +747,7 @@ class Handler(SimpleHTTPRequestHandler):
                     if inventory_count(conn, user["id"], offer_item_id) < 2:
                         raise ApiError(HTTPStatus.CONFLICT, "Tu peux envoyer seulement une carte en double.")
                     trade_id = secrets.token_urlsafe(10)
+                    created_at = now()
                     add_item(conn, user["id"], offer_item_id, -1)
                     add_item(conn, to_user["id"], offer_item_id, 1)
                     conn.execute(
@@ -699,7 +755,16 @@ class Handler(SimpleHTTPRequestHandler):
                         INSERT INTO trades (id, from_user_id, to_user_id, offer_item_id, request_item_id, status, created_at)
                         VALUES (?, ?, ?, ?, ?, 'sent', ?)
                         """,
-                        (trade_id, user["id"], to_user["id"], offer_item_id, offer_item_id, now()),
+                        (trade_id, user["id"], to_user["id"], offer_item_id, offer_item_id, created_at),
+                    )
+                    create_notification(
+                        conn,
+                        to_user["id"],
+                        "card_received",
+                        trade_id,
+                        {"item": item_payload(offer_item_id)},
+                        actor_user_id=user["id"],
+                        created_at=created_at,
                     )
                     row = conn.execute("SELECT * FROM trades WHERE id = ?", (trade_id,)).fetchone()
                     new_ach = _unlock_achievements(conn, user)

@@ -2,7 +2,7 @@ import {
   state,
   RARITIES, RARITY_RANK, SELL_PRICES, SHOWCASE_LIMIT,
   creditTimerText, escapeHtml, formatCredits, statsHtml,
-} from "./state.js";
+} from "./state.js?v=notifications-5";
 
 // ---------------------------------------------------------------------------
 // Posters
@@ -45,12 +45,20 @@ export function nav() {
     ["collection",   "Collection"],
     ["leaderboard",  "Classement"],
     ["achievements", "Succès"],
+    ["notifications", "Notifications"],
     ["login",        state.user ? state.user.username : "Connexion"],
   ];
   return tabs
-    .map(([id, label]) =>
-      `<button class="ghost ${state.view === id ? "active" : ""}" data-view="${id}">${escapeHtml(label)}</button>`
-    )
+    .map(([id, label]) => {
+      const unread = Number(state.unreadNotificationCount || 0);
+      const badge = id === "notifications"
+        ? `<span class="notification-badge ${unread ? "" : "is-empty"}" aria-hidden="true">${unread > 99 ? "99+" : unread}</span>`
+        : "";
+      const ariaLabel = id === "notifications" && unread
+        ? ` aria-label="Notifications, ${unread} non lue${unread > 1 ? "s" : ""}"`
+        : "";
+      return `<button class="ghost ${state.view === id ? "active" : ""}" data-view="${id}"${ariaLabel}><span>${escapeHtml(label)}</span>${badge}</button>`;
+    })
     .join("");
 }
 
@@ -517,6 +525,76 @@ export function achievementsViewHtml() {
 }
 
 // ---------------------------------------------------------------------------
+// Notifications
+// ---------------------------------------------------------------------------
+
+function notificationDate(timestamp) {
+  const date = new Date(Number(timestamp || 0) * 1000);
+  if (Number.isNaN(date.getTime())) return "";
+  return new Intl.DateTimeFormat("fr-FR", {
+    dateStyle: "medium",
+    timeStyle: "short",
+  }).format(date);
+}
+
+function notificationRowHtml(notification) {
+  const highlighted = !notification.read || state.notificationHighlightIds.includes(notification.id);
+  const formattedDate = notificationDate(notification.createdAt);
+  if (notification.type === "card_received") {
+    const item = notification.data?.item || {};
+    const sender = notification.actorUsername || "Un utilisateur";
+    return `
+      <article class="notification-row ${highlighted ? "is-unread" : ""}">
+        <div class="notification-icon notification-icon-card" aria-hidden="true"></div>
+        <div class="notification-content">
+          <span class="notification-kind">Carte reçue</span>
+          <strong>${escapeHtml(sender)} t’a envoyé ${escapeHtml(item.name || "une carte")}</strong>
+          ${item.rarity ? `<span>Rareté <span class="rarity ${escapeHtml(item.rarity)}">${escapeHtml(item.rarity)}</span></span>` : ""}
+        </div>
+        <time datetime="${new Date(Number(notification.createdAt || 0) * 1000).toISOString()}">${escapeHtml(formattedDate)}</time>
+      </article>
+    `;
+  }
+  if (notification.type === "achievement_unlocked") {
+    const achievement = notification.data?.achievement || {};
+    return `
+      <article class="notification-row ${highlighted ? "is-unread" : ""}">
+        <div class="notification-icon notification-icon-achievement" aria-hidden="true"></div>
+        <div class="notification-content">
+          <span class="notification-kind">Succès débloqué</span>
+          <strong>${escapeHtml(achievement.name || "Nouveau succès")}</strong>
+          <span>${escapeHtml(achievement.description || "")}${achievement.reward !== undefined ? ` · +${Number(achievement.reward || 0)}¥` : ""}</span>
+        </div>
+        <time datetime="${new Date(Number(notification.createdAt || 0) * 1000).toISOString()}">${escapeHtml(formattedDate)}</time>
+      </article>
+    `;
+  }
+  return "";
+}
+
+export function notificationsViewHtml() {
+  let content = `<p class="muted-copy">Chargement…</p>`;
+  if (state.notificationsLoaded) {
+    const rows = state.notifications.map(notificationRowHtml).filter(Boolean).join("");
+    content = rows || `<p class="empty-state"><strong>Aucune notification.</strong><br>Les cartes reçues et les succès débloqués apparaîtront ici.</p>`;
+  }
+  return `
+    <section class="panel stack notifications-panel">
+      <div class="section-heading">
+        <div>
+          <p class="eyebrow">Activité</p>
+          <h1>Notifications</h1>
+        </div>
+        ${state.notificationsLoaded && state.notifications.length
+          ? `<button class="ghost notification-clear" id="clearNotifications" type="button">Vider les notifications</button>`
+          : ""}
+      </div>
+      <div class="notification-list" aria-live="polite">${content}</div>
+    </section>
+  `;
+}
+
+// ---------------------------------------------------------------------------
 // Écran connexion / compte
 // ---------------------------------------------------------------------------
 
@@ -617,8 +695,8 @@ export function creditsPanelHtml() {
       </div>
       <div class="privacy-notice">
         <h3>Confidentialité</h3>
-        <p>CinéGacha enregistre uniquement les données nécessaires au jeu : pseudo, clé de connexion hashée, collection, crédits, échanges, favoris, watchlist et films vus.</p>
-        <p>Ces données sont stockées dans la base SQLite du serveur. Elles servent à retrouver ton compte, afficher ta progression, gérer les échanges et maintenir le classement.</p>
+        <p>CinéGacha enregistre uniquement les données nécessaires au jeu : pseudo, clé de connexion hashée, collection, crédits, échanges, notifications, succès, favoris, watchlist et films vus.</p>
+        <p>Ces données sont stockées dans la base SQLite du serveur. Elles servent à retrouver ton compte, afficher ta progression, gérer les échanges et notifications, et maintenir le classement.</p>
         <p>Pour toute question, demande d'accès ou suppression de compte, contacte <a href="mailto:cinegacha.app@pm.me">cinegacha.app@pm.me</a>.</p>
       </div>
     </section>
