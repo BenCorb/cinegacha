@@ -29,6 +29,7 @@ export const state = {
   openingRarity: "C",
   activeCardMenu: null,
   cardMenuMode: null,
+  cardViewer: null,
   keyModal: null,
   filters: { q: "", rarity: "all", owned: "all", sort: "standard" },
   publicFilters: { q: "", rarity: "all", owned: "all" },

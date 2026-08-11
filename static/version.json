@@ -1,7 +1,16 @@
 {
-  "version": "1.6",
+  "version": "1.7",
   "license": "GPL-3.0-or-later",
   "changelog": [
+    {
+      "version": "1.7",
+      "changes": [
+        "Renommage de la collection en Cinédex",
+        "Ajout des grilles mobiles à trois colonnes et du lecteur de cartes",
+        "Amélioration des vitrines et des collections publiques",
+        "Affichage du classement dans une liste de cinq joueurs défilante"
+      ]
+    },
     {
       "version": "1.6",
       "changes": [

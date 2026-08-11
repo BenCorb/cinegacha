@@ -2,7 +2,7 @@ import {
   state,
   DEFAULT_COLLECTION_SORT, RARITIES, RARITY_RANK, SELL_PRICES, SHOWCASE_LIMIT,
   creditTimerText, escapeHtml, formatCredits, statsHtml,
-} from "./state.js?v=collection-sort-2";
+} from "./state.js?v=cinedex-mobile-5";
 
 // ---------------------------------------------------------------------------
 // Posters
@@ -42,7 +42,7 @@ export function walletHtml() {
 export function nav() {
   const tabs = [
     ["gacha",        "Gachapon"],
-    ["collection",   "Collection"],
+    ["collection",   "Cinédex"],
     ["leaderboard",  "Classement"],
     ["achievements", "Succès"],
     ["notifications", "Notifications"],
@@ -187,31 +187,92 @@ export function collectionCardHtml(item, featured, readonly = false, menuScope =
 export function collectionGridHtml(items) {
   const nextSlot = firstEmptyShowcaseSlot();
   return items
-    .map((item) => collectionCardHtml(item, false, false, "collection", nextSlot))
+    .map((item) => mobileCardTileHtml(item, {
+      source: "collection",
+      cardHtml: collectionCardHtml(item, false, false, "collection", nextSlot),
+    }))
     .join("");
+}
+
+function mobileCardTileHtml(item, { source, cardHtml }) {
+  return `
+    <div
+      class="mobile-card-tile"
+      data-mobile-card-id="${escapeHtml(item.id)}"
+      data-mobile-card-source="${escapeHtml(source)}"
+      data-mobile-card-label="Agrandir la carte ${escapeHtml(item.name)}"
+    >
+      <div class="mobile-card-scale">
+        ${cardHtml}
+      </div>
+    </div>
+  `;
+}
+
+export function cardViewerHtml(items, { readonly = false, navigationLabel = "Navigation entre les cartes" } = {}) {
+  if (!state.cardViewer) return "";
+  const index = items.findIndex((item) => String(item.id) === String(state.cardViewer.itemId));
+  if (index < 0) return "";
+  const item = items[index];
+  const nextSlot = firstEmptyShowcaseSlot();
+  return `
+    <div class="collection-viewer-backdrop" data-collection-viewer-backdrop>
+      <section
+        class="collection-viewer"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="collectionViewerTitle"
+      >
+        <h2 class="visually-hidden" id="collectionViewerTitle">${escapeHtml(item.name)}</h2>
+        <button class="collection-viewer-close" type="button" data-collection-viewer-close aria-label="Fermer">×</button>
+        <div class="collection-viewer-stage" data-collection-viewer-stage>
+          <div class="collection-viewer-card-shell">
+            <div class="mobile-card-scale">
+              ${collectionCardHtml(item, false, readonly, "collection-viewer", nextSlot)}
+            </div>
+          </div>
+        </div>
+        <div class="collection-viewer-controls" aria-label="${escapeHtml(navigationLabel)}">
+          <button type="button" class="ghost" data-collection-viewer-step="-1" ${index === 0 ? "disabled" : ""} aria-label="Carte précédente">←</button>
+          <span aria-live="polite">${index + 1} / ${items.length}</span>
+          <button type="button" class="ghost" data-collection-viewer-step="1" ${index === items.length - 1 ? "disabled" : ""} aria-label="Carte suivante">→</button>
+        </div>
+      </section>
+    </div>
+  `;
 }
 
 export function publicCardHtml(item) {
   return collectionCardHtml(item, false, true);
 }
 
+export function publicCollectionCardHtml(item) {
+  return `
+    <div class="public-card-tile">
+      <div class="mobile-card-scale">
+        ${publicCardHtml(item)}
+      </div>
+    </div>
+  `;
+}
+
 function showcaseSlotHtml(slot, item) {
   if (!item) {
     return `
       <div class="showcase-slot is-empty">
-        <span class="showcase-slot-number">Emplacement ${slot}</span>
         <div class="showcase-empty">Libre</div>
       </div>
     `;
   }
   return `
     <div class="showcase-slot is-filled">
-      <span class="showcase-slot-number">Emplacement ${slot}</span>
-      ${collectionCardHtml(item, false, false, `showcase-${slot}`)}
+      ${mobileCardTileHtml(item, {
+        source: "showcase",
+        cardHtml: collectionCardHtml(item, false, false, `showcase-${slot}`),
+      })}
       <div class="showcase-controls">
         <button type="button" class="ghost" data-showcase-move="${item.id}" data-showcase-slot="${slot - 1}" ${slot === 1 ? "disabled" : ""} aria-label="Déplacer ${escapeHtml(item.name)} vers la gauche">←</button>
         <button type="button" class="ghost" data-showcase-move="${item.id}" data-showcase-slot="${slot + 1}" ${slot === SHOWCASE_LIMIT ? "disabled" : ""} aria-label="Déplacer ${escapeHtml(item.name)} vers la droite">→</button>
-        <button type="button" class="ghost" data-showcase-remove="${item.id}">Retirer</button>
       </div>
     </div>
   `;
@@ -248,7 +309,10 @@ function publicShowcaseHtml(profile) {
         </div>
       </div>
       <div class="public-showcase-grid">
-        ${items.map(publicCardHtml).join("")}
+        ${items.map((item) => mobileCardTileHtml(item, {
+          source: "public-showcase",
+          cardHtml: publicCardHtml(item),
+        })).join("")}
       </div>
     </section>
   `;
@@ -485,7 +549,7 @@ export function publicCollectionHtml(profile) {
         <option value="unseen"    ${state.publicFilters.owned === "unseen"    ? "selected" : ""}>Non vus</option>
       </select>
     </div>
-    <div class="grid public-grid">${ownedItems.map(publicCardHtml).join("") || `<p>Aucune carte obtenue.</p>`}</div>
+    <div class="grid public-grid">${ownedItems.map(publicCollectionCardHtml).join("") || `<p>Aucune carte obtenue.</p>`}</div>
   `;
 }
 

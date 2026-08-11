@@ -28,7 +28,8 @@ body {
     linear-gradient(135deg, #fff7d8 0%, #fff8f1 42%, #e9fbff 100%);
 }
 
-body.is-result-open {
+body.is-result-open,
+body.is-collection-viewer-open {
   position: fixed;
   inset: 0;
   width: 100%;
@@ -36,6 +37,22 @@ body.is-result-open {
   overflow: hidden;
   overscroll-behavior: none;
   touch-action: none;
+}
+
+body.is-collection-viewer-open {
+  top: var(--collection-viewer-scroll-top, 0px);
+}
+
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  margin: -1px !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
 }
 
 button, input, select {
@@ -1057,6 +1074,149 @@ input, select {
   gap: 18px;
 }
 
+.collection-grid {
+  grid-template-columns: repeat(auto-fill, 300px);
+  align-items: start;
+  overflow: visible;
+}
+
+.mobile-card-tile,
+.mobile-card-scale {
+  display: contents;
+}
+
+.collection-viewer-card-shell {
+  width: 300px;
+  aspect-ratio: 3 / 5;
+  position: relative;
+  min-width: 0;
+}
+
+.collection-grid .empty-state {
+  grid-column: 1 / -1;
+}
+
+/* ===== Lecteur du Cinédex ===== */
+
+.collection-viewer-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  padding: max(18px, env(safe-area-inset-top)) max(18px, env(safe-area-inset-right)) max(18px, env(safe-area-inset-bottom)) max(18px, env(safe-area-inset-left));
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  overscroll-behavior: none;
+  background:
+    radial-gradient(circle at 18% 18%, rgba(255,125,168,.22), transparent 30%),
+    radial-gradient(circle at 82% 8%, rgba(100,200,242,.2), transparent 32%),
+    rgba(255,250,242,.88);
+  backdrop-filter: blur(9px);
+}
+
+.collection-viewer {
+  width: min(420px, 100%);
+  max-height: 100%;
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+}
+
+.collection-viewer-close {
+  position: absolute;
+  top: -12px;
+  right: 8px;
+  z-index: 8;
+  width: 42px;
+  height: 42px;
+  padding: 0;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: #fffaf2;
+  font-size: 1.35rem;
+  font-weight: 900;
+  line-height: 1;
+}
+
+.collection-viewer-stage {
+  width: 100%;
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  touch-action: pan-y;
+  perspective: 900px;
+}
+
+.collection-viewer-card-shell {
+  opacity: var(--collection-swipe-opacity, 1);
+  transform: translate3d(var(--collection-swipe-x, 0), 0, 0) rotate(var(--collection-swipe-rotate, 0deg));
+  transform-origin: 50% 82%;
+}
+
+.collection-viewer-card-shell.is-swiping,
+.collection-viewer-card-shell.is-swipe-returning,
+.collection-viewer-card-shell.is-swipe-dismissed {
+  will-change: transform, opacity;
+}
+
+.collection-viewer-card-shell.is-swiping {
+  transition: none;
+}
+
+.collection-viewer-card-shell.is-swipe-returning {
+  transition: transform .2s cubic-bezier(.2, .9, .25, 1), opacity .2s ease;
+}
+
+.collection-viewer-card-shell.is-swipe-dismissed {
+  pointer-events: none;
+  transition: transform .18s ease-in, opacity .18s ease-in;
+}
+
+.collection-viewer-card-shell .card {
+  overflow: hidden;
+}
+
+.collection-viewer-card-shell .card:has(.recipient-suggestions:not([hidden])) {
+  overflow: visible;
+}
+
+.collection-viewer-controls {
+  display: grid;
+  grid-template-columns: 46px minmax(82px, auto) 46px;
+  gap: 10px;
+  align-items: center;
+  justify-content: center;
+}
+
+.collection-viewer-controls button {
+  width: 46px;
+  height: 40px;
+  padding: 0;
+  font-size: 1.15rem;
+  font-weight: 900;
+}
+
+.collection-viewer-controls span {
+  min-width: 82px;
+  text-align: center;
+  font-size: .85rem;
+  font-weight: 900;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .collection-viewer-card-shell {
+    transition: none !important;
+  }
+}
+
+@media (min-width: 701px) {
+  .collection-viewer-backdrop {
+    display: none !important;
+  }
+}
+
 .card {
   --tilt-x: 0deg;
   --tilt-y: 0deg;
@@ -1492,12 +1652,6 @@ input, select {
   background: rgba(255,255,255,.42);
 }
 
-.showcase-slot-number {
-  color: var(--muted);
-  font-size: .72rem;
-  font-weight: 900;
-}
-
 .showcase-empty {
   width: min(100%, 300px);
   min-height: 500px;
@@ -1520,7 +1674,7 @@ input, select {
   width: min(100%, 300px);
   justify-self: center;
   display: grid;
-  grid-template-columns: 34px 34px 1fr;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 6px;
 }
 
@@ -1536,17 +1690,48 @@ input, select {
 }
 
 .public-showcase-grid {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  justify-content: stretch;
   align-items: flex-start;
   gap: 18px;
 }
 
-.public-showcase-grid .card {
-  flex: 0 1 300px;
-  width: min(100%, 300px);
-  max-width: 300px;
+.public-showcase-grid .mobile-card-tile {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 5;
+  position: relative;
+  min-width: 0;
+  overflow: visible;
+}
+
+.public-showcase-grid .mobile-card-scale {
+  --collection-card-scale: 1;
+  display: block;
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 300px;
+  height: 500px;
+  transform: scale(var(--collection-card-scale));
+  transform-origin: top left;
+}
+
+.public-showcase-grid .mobile-card-scale > .card {
+  width: 300px;
+  max-width: none;
+  height: 500px;
+  grid-template-rows: minmax(42px, auto) minmax(0, 1fr) auto auto auto;
+}
+
+.public-showcase-grid .mobile-card-scale > .card .card-action-area {
+  min-height: 0;
+}
+
+.public-showcase-grid .mobile-card-scale > .card .poster,
+.public-showcase-grid .mobile-card-scale > .card .placeholder {
+  height: 100%;
+  min-height: 0;
 }
 
 .form { grid-template-columns: 1fr 1fr auto; align-items: end; }
@@ -1814,12 +1999,26 @@ input, select {
 }
 
 .leaderboard-list {
+  --leaderboard-row-height: 72px;
   display: grid;
   gap: 9px;
+  max-height: 399px;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding-bottom: 3px;
+  scrollbar-gutter: stable;
+}
+
+.leaderboard-list:focus-visible {
+  border-radius: 8px;
+  outline: 3px solid var(--blue);
+  outline-offset: 3px;
 }
 
 .leaderboard-row {
   width: 100%;
+  height: var(--leaderboard-row-height);
   display: grid;
   grid-template-columns: 34px minmax(0, 1fr) auto auto;
   gap: 9px;
@@ -1919,7 +2118,50 @@ input, select {
 }
 
 .public-grid {
-  grid-template-columns: repeat(auto-fill, minmax(230px, 280px));
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+}
+
+.public-card-tile {
+  display: block;
+  width: 100%;
+  aspect-ratio: 3 / 5;
+  position: relative;
+  min-width: 0;
+  overflow: visible;
+}
+
+.public-card-tile > .mobile-card-scale {
+  --collection-card-scale: 1;
+  display: block;
+  position: absolute;
+  inset: 0 auto auto 0;
+  width: 300px;
+  height: 500px;
+  transform: scale(var(--collection-card-scale));
+  transform-origin: top left;
+}
+
+.public-card-tile > .mobile-card-scale > .card {
+  width: 300px;
+  max-width: none;
+  height: 500px;
+  grid-template-rows: minmax(42px, auto) minmax(0, 1fr) auto auto auto;
+}
+
+.public-card-tile > .mobile-card-scale > .card .card-action-area {
+  min-height: 0;
+}
+
+.public-card-tile > .mobile-card-scale > .card .poster,
+.public-card-tile > .mobile-card-scale > .card .placeholder {
+  height: 100%;
+  min-height: 0;
+}
+
+.public-grid > p {
+  grid-column: 1 / -1;
 }
 
 .empty-public-collection {
@@ -2443,6 +2685,94 @@ input, select {
     padding: 12px;
   }
 
+  .collection-grid {
+    width: 100%;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    justify-content: stretch;
+    gap: 6px;
+  }
+
+  .public-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    gap: 6px;
+  }
+
+  .mobile-card-tile {
+    display: block;
+    width: 100%;
+    aspect-ratio: 3 / 5;
+    position: relative;
+    min-width: 0;
+    overflow: visible;
+    outline: none;
+    cursor: zoom-in;
+  }
+
+  .mobile-card-tile:focus-visible {
+    border-radius: 8px;
+    outline: 3px solid var(--blue);
+    outline-offset: 2px;
+  }
+
+  .mobile-card-scale {
+    --collection-card-scale: 1;
+    display: block;
+    position: absolute;
+    inset: 0 auto auto 0;
+    width: 300px;
+    height: 500px;
+    transform: scale(var(--collection-card-scale));
+    transform-origin: top left;
+  }
+
+  .mobile-card-scale > .card {
+    width: 300px;
+    max-width: none;
+    height: 500px;
+    grid-template-rows: minmax(42px, auto) minmax(0, 1fr) auto auto auto;
+  }
+
+  .mobile-card-scale > .card .card-action-area {
+    min-height: 0;
+  }
+
+  .mobile-card-scale > .card .poster,
+  .mobile-card-scale > .card .placeholder {
+    height: 100%;
+    min-height: 0;
+  }
+
+  .mobile-card-tile > .mobile-card-scale > .card {
+    pointer-events: none;
+    user-select: none;
+  }
+
+  .collection-viewer-backdrop {
+    padding: max(12px, env(safe-area-inset-top)) max(12px, env(safe-area-inset-right)) max(12px, env(safe-area-inset-bottom)) max(12px, env(safe-area-inset-left));
+  }
+
+  .collection-viewer {
+    width: 100%;
+    gap: 8px;
+  }
+
+  .collection-viewer-close {
+    top: -7px;
+    right: 0;
+    width: 38px;
+    height: 38px;
+  }
+
+  .collection-viewer-controls {
+    grid-template-columns: 42px minmax(72px, auto) 42px;
+    gap: 8px;
+  }
+
+  .collection-viewer-controls button {
+    width: 42px;
+    height: 36px;
+  }
+
   .topbar {
     margin: 0;
     gap: 7px;
@@ -2492,17 +2822,44 @@ input, select {
 
   .showcase-slots,
   .public-showcase-grid {
-    align-items: center;
+    width: 100%;
+    display: grid;
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    align-items: start;
+    justify-content: stretch;
+    gap: 6px;
   }
 
   .showcase-slot {
-    flex: 0 0 auto;
-    width: min(100%, 324px);
+    width: 100%;
+    min-width: 0;
+    padding: 4px;
+    gap: 4px;
   }
 
-  .public-showcase-grid .card {
-    flex: 0 0 auto;
-    width: min(100%, 300px);
+  .showcase-empty {
+    width: 100%;
+    min-height: 0;
+    aspect-ratio: 3 / 5;
+    font-size: .7rem;
+  }
+
+  .showcase-controls {
+    width: 100%;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 3px;
+  }
+
+  .showcase-controls button {
+    min-width: 0;
+    padding: .28rem .08rem;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    font-size: .56rem;
+  }
+
+  .public-showcase-grid .mobile-card-tile {
+    width: 100%;
   }
 
   .shell:not(.view-gacha) > .panel,

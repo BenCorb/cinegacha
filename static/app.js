@@ -3,15 +3,15 @@ import {
   DEFAULT_COLLECTION_SORT, RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
-} from "./js/state.js?v=collection-sort-2";
+} from "./js/state.js?v=cinedex-mobile-5";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
-  collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
+  cardViewerHtml, collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
   creditsPanelHtml, dropRatesHtml, filterCountText, filteredCollection,
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
-  loginForms, nav, notificationsViewHtml, publicCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
-  walletHtml,
-} from "./js/components.js?v=collection-sort-2";
+  loginForms, nav, notificationsViewHtml, publicCollectionCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
+  showcaseItems, walletHtml,
+} from "./js/components.js?v=cinedex-mobile-5";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -34,6 +34,16 @@ const RESULT_SWIPE_LOCK_DISTANCE = 12;
 const RESULT_SWIPE_RATIO = 0.32;
 const RESULT_SWIPE_MAX_DISTANCE = 96;
 const RESULT_SWIPE_MIN_VELOCITY = 0.55;
+const COLLECTION_SWIPE_LOCK_DISTANCE = 12;
+const COLLECTION_SWIPE_RATIO = 0.24;
+const COLLECTION_SWIPE_MAX_DISTANCE = 84;
+const COLLECTION_SWIPE_MIN_VELOCITY = 0.5;
+
+const MOBILE_CARD_QUERY = window.matchMedia("(max-width: 700px)");
+let mobileCardScaleObserver = null;
+let cardViewerAbortController = null;
+let cardViewerReturnTarget = null;
+let cardViewerScrollY = 0;
 
 function resultEntries(result = state.result) {
   if (!result) return [];
@@ -337,6 +347,7 @@ async function refresh({ shouldRender = true } = {}) {
       state.unreadNotificationCount = 0;
       state.notificationHighlightIds = [];
       state.publicCollection = null;
+      state.cardViewer = null;
       state.pendingRoll = null;
       state.result = null;
       state.resultIndex = 0;
@@ -378,6 +389,9 @@ function renderShell(content) {
     button.addEventListener("click", () => {
       const previousView = state.view;
       state.view = button.dataset.view;
+      state.cardViewer = null;
+      state.activeCardMenu = null;
+      state.cardMenuMode = null;
       if (previousView === "notifications" && state.view !== "notifications") {
         state.notificationHighlightIds = [];
       }
@@ -740,6 +754,7 @@ function renderCollection() {
       </div>
       <div class="grid collection-grid">${items.length ? collectionGridHtml(items) : collectionEmptyHtml()}</div>
     </section>
+    ${cardViewerMarkup()}
   `);
   ["q", "rarity", "owned", "sort"].forEach((id) => {
     $("#" + id).addEventListener("input", (event) => {
@@ -765,6 +780,333 @@ function renderCollectionGrid() {
   const active = hasActiveFilters();
   document.querySelector(".filter-reset")?.classList.toggle("is-active", active);
   bindInteractiveCards();
+  bindMobileCardExperience();
+}
+
+function isMobileCardLayout() {
+  return MOBILE_CARD_QUERY.matches;
+}
+
+function viewerItemsForSource(source = state.cardViewer?.source) {
+  if (source === "collection") return filteredCollection();
+  if (source === "showcase") return showcaseItems();
+  if (source === "public-showcase") return showcaseItems(state.publicCollection?.items || []);
+  return [];
+}
+
+function viewerSourceAllowedInCurrentView(source = state.cardViewer?.source) {
+  if (state.view === "collection") return source === "collection" || source === "showcase";
+  if (state.view === "leaderboard") return source === "public-showcase";
+  return false;
+}
+
+function cardViewerItemIndex(items = viewerItemsForSource()) {
+  return items.findIndex((item) => String(item.id) === String(state.cardViewer?.itemId));
+}
+
+function cardViewerMarkup() {
+  if (!isMobileCardLayout() || !state.cardViewer || !viewerSourceAllowedInCurrentView()) return "";
+  const source = state.cardViewer.source;
+  return cardViewerHtml(viewerItemsForSource(source), {
+    readonly: source === "public-showcase",
+    navigationLabel: source === "collection" ? "Navigation dans le Cinédex" : "Navigation dans la vitrine",
+  });
+}
+
+function clearCardViewerState({ restoreScroll = false } = {}) {
+  const scrollY = cardViewerScrollY;
+  state.cardViewer = null;
+  state.activeCardMenu = null;
+  state.cardMenuMode = null;
+  document.body.style.removeProperty("--collection-viewer-scroll-top");
+  if (restoreScroll) requestAnimationFrame(() => window.scrollTo(0, scrollY));
+}
+
+function normalizeCardViewerState() {
+  if (!state.cardViewer) return;
+  const items = viewerItemsForSource();
+  if (
+    !isMobileCardLayout()
+    || !viewerSourceAllowedInCurrentView()
+    || cardViewerItemIndex(items) < 0
+  ) clearCardViewerState({ restoreScroll: true });
+}
+
+function scaleResponsiveCards() {
+  const viewerShell = document.querySelector(".collection-viewer-card-shell");
+  if (viewerShell && isMobileCardLayout()) {
+    const reservedHeight = window.innerWidth <= 700 ? 116 : 136;
+    const widthFromHeight = Math.max(120, (window.innerHeight - reservedHeight) * 3 / 5);
+    const sideMargin = window.innerWidth <= 700 ? 32 : 72;
+    const viewerWidth = Math.min(300, Math.max(120, window.innerWidth - sideMargin), widthFromHeight);
+    viewerShell.style.width = `${viewerWidth.toFixed(2)}px`;
+  }
+
+  document.querySelectorAll(".mobile-card-tile, .public-card-tile, .collection-viewer-card-shell").forEach((shell) => {
+    const shouldScale = isMobileCardLayout()
+      || shell.classList.contains("public-card-tile")
+      || Boolean(shell.closest(".public-showcase-grid"));
+    if (!shouldScale) return;
+    const scale = shell.getBoundingClientRect().width / 300;
+    const cardScale = shell.querySelector(":scope > .mobile-card-scale");
+    if (cardScale && scale > 0) cardScale.style.setProperty("--collection-card-scale", scale.toFixed(5));
+  });
+}
+
+function observeResponsiveCardSizes() {
+  mobileCardScaleObserver?.disconnect();
+  mobileCardScaleObserver = null;
+  if (window.ResizeObserver) {
+    mobileCardScaleObserver = new ResizeObserver(scaleResponsiveCards);
+    const selector = isMobileCardLayout()
+      ? ".collection-grid, .showcase-slots, .public-showcase-grid, .public-grid"
+      : ".public-showcase-grid, .public-grid";
+    document.querySelectorAll(selector).forEach((container) => {
+      mobileCardScaleObserver.observe(container);
+    });
+  }
+  requestAnimationFrame(scaleResponsiveCards);
+}
+
+function openCardViewer(itemId, source) {
+  if (!isMobileCardLayout()) return;
+  const items = viewerItemsForSource(source);
+  if (!items.some((item) => String(item.id) === String(itemId))) return;
+  cardViewerReturnTarget = { itemId: String(itemId), source };
+  cardViewerScrollY = window.scrollY;
+  document.body.style.setProperty("--collection-viewer-scroll-top", `${-cardViewerScrollY}px`);
+  state.cardViewer = { itemId, source };
+  state.activeCardMenu = null;
+  state.cardMenuMode = null;
+  render();
+  requestAnimationFrame(() => document.querySelector(".collection-viewer-close")?.focus({ preventScroll: true }));
+}
+
+function closeCardViewer() {
+  const returnTarget = cardViewerReturnTarget || {
+    itemId: String(state.cardViewer?.itemId || ""),
+    source: state.cardViewer?.source || "",
+  };
+  const scrollY = cardViewerScrollY;
+  clearCardViewerState();
+  render();
+  window.scrollTo(0, scrollY);
+  requestAnimationFrame(() => {
+    const tile = [...document.querySelectorAll("[data-mobile-card-id]")]
+      .find((entry) => entry.dataset.mobileCardId === returnTarget.itemId
+        && entry.dataset.mobileCardSource === returnTarget.source);
+    tile?.focus({ preventScroll: true });
+  });
+}
+
+function stepCardViewer(delta) {
+  const items = viewerItemsForSource();
+  const index = cardViewerItemIndex(items);
+  const next = items[index + delta];
+  if (!next) return false;
+  state.cardViewer = { ...state.cardViewer, itemId: next.id };
+  state.activeCardMenu = null;
+  state.cardMenuMode = null;
+  render();
+  requestAnimationFrame(() => document.querySelector(".collection-viewer-close")?.focus({ preventScroll: true }));
+  return true;
+}
+
+function bindCardViewerSwipe(stage, signal) {
+  const shell = stage.querySelector(".collection-viewer-card-shell");
+  if (!shell || !window.PointerEvent) return;
+  let pointerId = null;
+  let startX = 0;
+  let startY = 0;
+  let startTime = 0;
+  let currentX = 0;
+  let currentY = 0;
+  let locked = false;
+  let frame = 0;
+  let suppressClick = false;
+
+  const clearFrame = () => {
+    if (frame) cancelAnimationFrame(frame);
+    frame = 0;
+  };
+  const clearStyles = () => {
+    shell.classList.remove("is-swiping", "is-swipe-returning", "is-swipe-dismissed");
+    shell.style.removeProperty("--collection-swipe-x");
+    shell.style.removeProperty("--collection-swipe-rotate");
+    shell.style.removeProperty("--collection-swipe-opacity");
+  };
+  const reset = () => {
+    clearFrame();
+    pointerId = null;
+    locked = false;
+  };
+  const paint = () => {
+    const width = shell.getBoundingClientRect().width || 300;
+    const progress = Math.min(Math.abs(currentX) / width, 1);
+    shell.style.setProperty("--collection-swipe-x", `${currentX.toFixed(1)}px`);
+    shell.style.setProperty("--collection-swipe-rotate", `${Math.max(-7, Math.min(7, currentX / width * 8)).toFixed(2)}deg`);
+    shell.style.setProperty("--collection-swipe-opacity", `${Math.max(.62, 1 - progress * .38).toFixed(2)}`);
+    frame = 0;
+  };
+
+  stage.addEventListener("pointerdown", (event) => {
+    const interactive = event.target.closest("button, a, input, select, textarea, form, [data-card-menu]");
+    if (interactive && !event.target.closest(".poster-button")) return;
+    if (event.isPrimary === false || (event.pointerType === "mouse" && event.button !== 0)) return;
+    pointerId = event.pointerId;
+    startX = event.clientX;
+    startY = event.clientY;
+    startTime = performance.now();
+    currentX = 0;
+    currentY = 0;
+    locked = false;
+    clearStyles();
+  }, { signal });
+
+  stage.addEventListener("pointermove", (event) => {
+    if (event.pointerId !== pointerId) return;
+    currentX = event.clientX - startX;
+    currentY = event.clientY - startY;
+    const distanceX = Math.abs(currentX);
+    const distanceY = Math.abs(currentY);
+    if (!locked) {
+      if (distanceY > COLLECTION_SWIPE_LOCK_DISTANCE && distanceY > distanceX) {
+        reset();
+        return;
+      }
+      if (distanceX < COLLECTION_SWIPE_LOCK_DISTANCE || distanceX <= distanceY) return;
+      locked = true;
+      shell.classList.add("is-swiping");
+      stage.setPointerCapture?.(event.pointerId);
+    }
+    event.preventDefault();
+    if (!frame) frame = requestAnimationFrame(paint);
+  }, { signal });
+
+  const finish = (event) => {
+    if (event.pointerId !== pointerId) return;
+    clearFrame();
+    if (!locked) {
+      reset();
+      return;
+    }
+    suppressClick = true;
+    setTimeout(() => { suppressClick = false; }, 450);
+    const width = shell.getBoundingClientRect().width || 300;
+    const elapsed = Math.max(1, performance.now() - startTime);
+    const velocity = Math.abs(currentX) / elapsed;
+    const threshold = Math.min(COLLECTION_SWIPE_MAX_DISTANCE, width * COLLECTION_SWIPE_RATIO);
+    const delta = currentX < 0 ? 1 : -1;
+    const items = viewerItemsForSource();
+    const canStep = Boolean(items[cardViewerItemIndex(items) + delta]);
+    const shouldStep = canStep && (
+      Math.abs(currentX) >= threshold
+      || (velocity >= COLLECTION_SWIPE_MIN_VELOCITY && Math.abs(currentX) >= COLLECTION_SWIPE_LOCK_DISTANCE * 2)
+    );
+    shell.classList.remove("is-swiping");
+    if (shouldStep) {
+      const direction = currentX < 0 ? -1 : 1;
+      shell.style.setProperty("--collection-swipe-x", `${direction * (window.innerWidth + width)}px`);
+      shell.style.setProperty("--collection-swipe-rotate", `${direction * 7}deg`);
+      shell.style.setProperty("--collection-swipe-opacity", "0");
+      shell.classList.add("is-swipe-dismissed");
+      setTimeout(() => stepCardViewer(delta), 180);
+    } else {
+      shell.style.setProperty("--collection-swipe-x", "0px");
+      shell.style.setProperty("--collection-swipe-rotate", "0deg");
+      shell.style.setProperty("--collection-swipe-opacity", "1");
+      shell.classList.add("is-swipe-returning");
+      setTimeout(clearStyles, 220);
+    }
+    reset();
+  };
+
+  stage.addEventListener("pointerup", finish, { signal });
+  stage.addEventListener("pointercancel", (event) => {
+    if (event.pointerId !== pointerId) return;
+    reset();
+    clearStyles();
+  }, { signal });
+  stage.addEventListener("click", (event) => {
+    if (!suppressClick) return;
+    suppressClick = false;
+    event.preventDefault();
+    event.stopPropagation();
+  }, { capture: true, signal });
+}
+
+function bindMobileCardExperience() {
+  cardViewerAbortController?.abort();
+  cardViewerAbortController = new AbortController();
+  const { signal } = cardViewerAbortController;
+  const mobile = isMobileCardLayout();
+  observeResponsiveCardSizes();
+
+  document.querySelectorAll(".mobile-card-tile").forEach((tile) => {
+    const card = tile.querySelector(":scope > .mobile-card-scale > .card");
+    if (card) {
+      card.inert = mobile;
+      if (mobile) card.setAttribute("aria-hidden", "true");
+      else card.removeAttribute("aria-hidden");
+    }
+    if (!mobile) {
+      tile.removeAttribute("tabindex");
+      tile.removeAttribute("role");
+      tile.removeAttribute("aria-label");
+      return;
+    }
+    tile.tabIndex = 0;
+    tile.setAttribute("role", "button");
+    tile.setAttribute("aria-label", tile.dataset.mobileCardLabel || "Agrandir la carte");
+    tile.addEventListener("click", () => {
+      openCardViewer(tile.dataset.mobileCardId, tile.dataset.mobileCardSource);
+    }, { signal });
+    tile.addEventListener("keydown", (event) => {
+      if (event.target !== tile || (event.key !== "Enter" && event.key !== " ")) return;
+      event.preventDefault();
+      openCardViewer(tile.dataset.mobileCardId, tile.dataset.mobileCardSource);
+    }, { signal });
+  });
+
+  const backdrop = document.querySelector("[data-collection-viewer-backdrop]");
+  const stage = document.querySelector("[data-collection-viewer-stage]");
+  if (!backdrop || !stage) return;
+  backdrop.addEventListener("click", (event) => {
+    if (event.target === backdrop) closeCardViewer();
+  }, { signal });
+  document.querySelector("[data-collection-viewer-close]")?.addEventListener("click", closeCardViewer, { signal });
+  document.querySelectorAll("[data-collection-viewer-step]").forEach((button) => {
+    button.addEventListener("click", () => stepCardViewer(Number(button.dataset.collectionViewerStep)), { signal });
+  });
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape") {
+      event.preventDefault();
+      closeCardViewer();
+      return;
+    }
+    if (event.key === "Tab") {
+      const viewer = document.querySelector(".collection-viewer");
+      const focusable = [...viewer.querySelectorAll(
+        "button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled)",
+      )].filter((element) => element.getClientRects().length > 0);
+      if (!focusable.length) return;
+      const currentIndex = focusable.indexOf(document.activeElement);
+      const nextIndex = event.shiftKey
+        ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+        : (currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
+      if (currentIndex < 0 || (event.shiftKey && currentIndex === 0) || (!event.shiftKey && currentIndex === focusable.length - 1)) {
+        event.preventDefault();
+        focusable[nextIndex].focus();
+      }
+      return;
+    }
+    if (event.target.closest("input, select, textarea, [contenteditable='true']")) return;
+    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+      event.preventDefault();
+      stepCardViewer(event.key === "ArrowLeft" ? -1 : 1);
+    }
+  }, { signal });
+  bindCardViewerSwipe(stage, signal);
 }
 
 // ---------------------------------------------------------------------------
@@ -796,7 +1138,7 @@ function renderLeaderboard() {
           <span class="credits-stamp">${state.leaderboard.length} joueurs</span>
         </div>
         <input id="leaderboardSearch" placeholder="Rechercher un joueur" value="${escapeHtml(state.leaderboardQuery)}" autocomplete="off" autocorrect="off" autocapitalize="none" spellcheck="false">
-        <div class="leaderboard-list">
+        <div class="leaderboard-list" role="region" aria-label="Classement des joueurs" tabindex="0">
           ${leaderboardEntries.map(leaderboardRowHtml).join("") || `<p>Aucun joueur trouvé.</p>`}
         </div>
       </div>
@@ -810,11 +1152,13 @@ function renderLeaderboard() {
         `}
       </div>
     </section>
+    ${cardViewerMarkup()}
   `);
   $("#leaderboardSearch")?.addEventListener("input", (event) => {
     state.leaderboardQuery = event.target.value;
-    renderLeaderboardList();
+    renderLeaderboardList({ resetScroll: true });
   });
+  bindLeaderboardScroll();
   ["publicQ", "publicRarity", "publicOwned"].forEach((id) => {
     $("#" + id)?.addEventListener("input", (event) => {
       const key = id === "publicQ" ? "q" : id === "publicRarity" ? "rarity" : "owned";
@@ -824,6 +1168,29 @@ function renderLeaderboard() {
   });
   document.querySelectorAll("[data-public-user]").forEach((button) => {
     button.addEventListener("click", () => loadPublicCollection(button.dataset.publicUser));
+  });
+}
+
+function bindLeaderboardScroll() {
+  const list = document.querySelector(".leaderboard-list");
+  if (!list) return;
+  list.addEventListener("keydown", (event) => {
+    if (event.target !== list) return;
+    const row = list.querySelector(".leaderboard-row");
+    const rowHeight = row?.getBoundingClientRect().height || 72;
+    const rowGap = Number.parseFloat(getComputedStyle(list).rowGap) || 0;
+    const rowStep = rowHeight + rowGap;
+    const pageStep = list.clientHeight;
+    let nextScrollTop = null;
+    if (event.key === "ArrowDown") nextScrollTop = list.scrollTop + rowStep;
+    else if (event.key === "ArrowUp") nextScrollTop = list.scrollTop - rowStep;
+    else if (event.key === "PageDown") nextScrollTop = list.scrollTop + pageStep;
+    else if (event.key === "PageUp") nextScrollTop = list.scrollTop - pageStep;
+    else if (event.key === "Home") nextScrollTop = 0;
+    else if (event.key === "End") nextScrollTop = list.scrollHeight;
+    if (nextScrollTop === null) return;
+    event.preventDefault();
+    list.scrollTop = Math.max(0, Math.min(nextScrollTop, list.scrollHeight - list.clientHeight));
   });
 }
 
@@ -840,11 +1207,12 @@ function loadLeaderboard() {
     .catch(() => {});
 }
 
-function renderLeaderboardList() {
+function renderLeaderboardList({ resetScroll = false } = {}) {
   const list = document.querySelector(".leaderboard-list");
   if (!list) return render();
   const entries = filteredLeaderboard();
   list.innerHTML = entries.map(leaderboardRowHtml).join("") || `<p>Aucun joueur trouvé.</p>`;
+  if (resetScroll) list.scrollTop = 0;
   document.querySelectorAll("[data-public-user]").forEach((button) => {
     button.addEventListener("click", () => loadPublicCollection(button.dataset.publicUser));
   });
@@ -854,12 +1222,14 @@ function renderPublicCollectionGrid() {
   const grid = document.querySelector(".public-grid");
   if (!grid) return render();
   const items = filteredPublicCollection();
-  grid.innerHTML = items.map(publicCardHtml).join("") || `<p>Aucune carte trouvée.</p>`;
+  grid.innerHTML = items.map(publicCollectionCardHtml).join("") || `<p>Aucune carte trouvée.</p>`;
   bindCardTilt();
+  requestAnimationFrame(scaleResponsiveCards);
 }
 
 async function loadPublicCollection(username) {
   try {
+    clearCardViewerState();
     state.publicCollection = await api(`/api/users/${encodeURIComponent(username)}/collection`);
     render();
   } catch (e) {
@@ -1397,9 +1767,6 @@ function bindInteractiveCards() {
     button.addEventListener("click", () =>
       setShowcaseSlot(button.dataset.showcaseMove, Number(button.dataset.showcaseSlot)));
   });
-  document.querySelectorAll("[data-showcase-remove]").forEach((button) => {
-    button.addEventListener("click", () => setShowcaseSlot(button.dataset.showcaseRemove, null));
-  });
   document.querySelectorAll("[data-poster-menu]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
@@ -1472,6 +1839,7 @@ function renderNotifications() {
 
 function render() {
   if (!state.user && state.view !== "login") state.view = "login";
+  normalizeCardViewerState();
   if      (state.view === "collection")   renderCollection();
   else if (state.view === "leaderboard")  renderLeaderboard();
   else if (state.view === "achievements") renderAchievements();
@@ -1479,7 +1847,16 @@ function render() {
   else if (state.view === "login")        renderLogin();
   else                                    renderGacha();
   document.body.classList.toggle("is-result-open", state.view === "gacha" && Boolean(state.result));
+  document.body.classList.toggle(
+    "is-collection-viewer-open",
+    isMobileCardLayout() && Boolean(state.cardViewer),
+  );
   bindInteractiveCards();
+  if (state.view === "collection" || state.view === "leaderboard") bindMobileCardExperience();
+  else {
+    cardViewerAbortController?.abort();
+    mobileCardScaleObserver?.disconnect();
+  }
 }
 
 document.addEventListener("click", (event) => {
@@ -1493,6 +1870,18 @@ document.addEventListener("visibilitychange", () => {
   if (document.hidden || !state.user) return;
   if (state.view === "notifications") loadNotifications({ showErrors: false });
   else refreshUnreadNotificationCount();
+});
+
+window.addEventListener("resize", () => {
+  requestAnimationFrame(scaleResponsiveCards);
+});
+
+MOBILE_CARD_QUERY.addEventListener("change", () => {
+  if (!isMobileCardLayout() && state.cardViewer) {
+    closeCardViewer();
+    return;
+  }
+  if (state.view === "collection" || state.view === "leaderboard") bindMobileCardExperience();
 });
 
 loadRelease().finally(() => refresh());
