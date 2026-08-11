@@ -1757,6 +1757,8 @@ input, select {
   box-shadow: 0 6px 0 #263249;
   padding: 14px 16px;
   width: 280px;
+  height: 260px;
+  overflow-y: auto;
   display: grid;
   gap: 12px;
 }
