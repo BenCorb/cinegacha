@@ -3,7 +3,7 @@ import {
   DEFAULT_COLLECTION_SORT, RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
-} from "./js/state.js?v=cinedex-mobile-5";
+} from "./js/state.js?v=cinedex-mobile-6";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
   cardViewerHtml, collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
@@ -11,7 +11,7 @@ import {
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
   loginForms, nav, notificationsViewHtml, publicCollectionCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
   showcaseItems, walletHtml,
-} from "./js/components.js?v=cinedex-mobile-5";
+} from "./js/components.js?v=cinedex-mobile-6";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -41,6 +41,7 @@ const COLLECTION_SWIPE_MIN_VELOCITY = 0.5;
 
 const MOBILE_CARD_QUERY = window.matchMedia("(max-width: 700px)");
 let mobileCardScaleObserver = null;
+let mobileCollectionImageObserver = null;
 let cardViewerAbortController = null;
 let cardViewerReturnTarget = null;
 let cardViewerScrollY = 0;
@@ -868,6 +869,40 @@ function observeResponsiveCardSizes() {
   requestAnimationFrame(scaleResponsiveCards);
 }
 
+function restoreMobileCollectionImages() {
+  document.querySelectorAll(".collection-grid img[data-mobile-poster-src]").forEach((image) => {
+    if (!image.getAttribute("src")) image.setAttribute("src", image.dataset.mobilePosterSrc);
+  });
+}
+
+function observeMobileCollectionImages() {
+  mobileCollectionImageObserver?.disconnect();
+  mobileCollectionImageObserver = null;
+  if (!isMobileCardLayout() || state.view !== "collection" || !window.IntersectionObserver) {
+    restoreMobileCollectionImages();
+    return;
+  }
+
+  mobileCollectionImageObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      const image = entry.target;
+      if (entry.isIntersecting) {
+        if (!image.getAttribute("src")) image.setAttribute("src", image.dataset.mobilePosterSrc);
+        return;
+      }
+      const source = image.getAttribute("src");
+      if (!source) return;
+      image.dataset.mobilePosterSrc = source;
+      image.removeAttribute("src");
+    });
+  }, { rootMargin: "1000px 0px" });
+
+  document.querySelectorAll(".collection-grid .mobile-card-tile img").forEach((image) => {
+    image.dataset.mobilePosterSrc = image.getAttribute("src") || image.dataset.mobilePosterSrc || "";
+    if (image.dataset.mobilePosterSrc) mobileCollectionImageObserver.observe(image);
+  });
+}
+
 function openCardViewer(itemId, source) {
   if (!isMobileCardLayout()) return;
   const items = viewerItemsForSource(source);
@@ -1041,6 +1076,7 @@ function bindMobileCardExperience() {
   const { signal } = cardViewerAbortController;
   const mobile = isMobileCardLayout();
   observeResponsiveCardSizes();
+  observeMobileCollectionImages();
 
   document.querySelectorAll(".mobile-card-tile").forEach((tile) => {
     const card = tile.querySelector(":scope > .mobile-card-scale > .card");
@@ -1856,6 +1892,7 @@ function render() {
   else {
     cardViewerAbortController?.abort();
     mobileCardScaleObserver?.disconnect();
+    mobileCollectionImageObserver?.disconnect();
   }
 }
 

@@ -2708,6 +2708,16 @@ input, select {
     cursor: zoom-in;
   }
 
+  .collection-grid .mobile-card-tile {
+    content-visibility: auto;
+  }
+
+  .collection-grid .mobile-card-tile > .mobile-card-scale > .card {
+    transform: none;
+    transform-style: flat;
+    transition: none;
+  }
+
   .mobile-card-tile:focus-visible {
     border-radius: 8px;
     outline: 3px solid var(--blue);
