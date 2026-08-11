@@ -3,7 +3,7 @@ import {
   DEFAULT_COLLECTION_SORT, RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
-} from "./js/state.js?v=cinedex-mobile-7";
+} from "./js/state.js?v=cinedex-mobile-8";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
   cardViewerHtml, collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
@@ -11,7 +11,7 @@ import {
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
   loginForms, nav, notificationsViewHtml, publicCollectionCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
   showcaseItems, walletHtml,
-} from "./js/components.js?v=cinedex-mobile-7";
+} from "./js/components.js?v=cinedex-mobile-8";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -39,12 +39,11 @@ const COLLECTION_SWIPE_RATIO = 0.24;
 const COLLECTION_SWIPE_MAX_DISTANCE = 84;
 const COLLECTION_SWIPE_MIN_VELOCITY = 0.5;
 const MOBILE_COLLECTION_COLUMNS = 3;
-const MOBILE_COLLECTION_WINDOW_ROWS = 36;
-const MOBILE_COLLECTION_OVERSCAN_ROWS = 10;
+const MOBILE_COLLECTION_WINDOW_ROWS = 18;
+const MOBILE_COLLECTION_OVERSCAN_ROWS = 6;
 
 const MOBILE_CARD_QUERY = window.matchMedia("(max-width: 700px)");
 let mobileCardScaleObserver = null;
-let mobileCollectionImageObserver = null;
 let mobileCollectionVirtualAbortController = null;
 let mobileCollectionVirtualFrame = 0;
 let mobileCollectionVirtualItems = [];
@@ -817,7 +816,7 @@ function renderCollection() {
         <span class="filter-count">${filterCountText(items.length)}</span>
         <button class="ghost filter-reset ${active ? "is-active" : ""}" id="resetFilters" type="button">Effacer les filtres</button>
       </div>
-      <div class="grid collection-grid">${items.length ? collectionGridHtml(gridWindow.items) : collectionEmptyHtml()}</div>
+      <div class="grid collection-grid">${items.length ? collectionGridHtml(gridWindow.items, { miniature: isMobileCardLayout() }) : collectionEmptyHtml()}</div>
     </section>
     ${cardViewerMarkup()}
   `);
@@ -841,7 +840,9 @@ function renderCollectionGrid() {
   state.cardMenuMode = null;
   const items = filteredCollection();
   const gridWindow = collectionGridWindow(items);
-  grid.innerHTML = items.length ? collectionGridHtml(gridWindow.items) : collectionEmptyHtml();
+  grid.innerHTML = items.length
+    ? collectionGridHtml(gridWindow.items, { miniature: isMobileCardLayout() })
+    : collectionEmptyHtml();
   applyCollectionGridWindow(grid, gridWindow);
   const countEl = document.querySelector(".filter-count");
   if (countEl) countEl.textContent = filterCountText(items.length);
@@ -936,40 +937,6 @@ function observeResponsiveCardSizes() {
   requestAnimationFrame(scaleResponsiveCards);
 }
 
-function restoreMobileCollectionImages() {
-  document.querySelectorAll(".collection-grid img[data-mobile-poster-src]").forEach((image) => {
-    if (!image.getAttribute("src")) image.setAttribute("src", image.dataset.mobilePosterSrc);
-  });
-}
-
-function observeMobileCollectionImages() {
-  mobileCollectionImageObserver?.disconnect();
-  mobileCollectionImageObserver = null;
-  if (!isMobileCardLayout() || state.view !== "collection" || !window.IntersectionObserver) {
-    restoreMobileCollectionImages();
-    return;
-  }
-
-  mobileCollectionImageObserver = new IntersectionObserver((entries) => {
-    entries.forEach((entry) => {
-      const image = entry.target;
-      if (entry.isIntersecting) {
-        if (!image.getAttribute("src")) image.setAttribute("src", image.dataset.mobilePosterSrc);
-        return;
-      }
-      const source = image.getAttribute("src");
-      if (!source) return;
-      image.dataset.mobilePosterSrc = source;
-      image.removeAttribute("src");
-    });
-  }, { rootMargin: "1000px 0px" });
-
-  document.querySelectorAll(".collection-grid .mobile-card-tile img").forEach((image) => {
-    image.dataset.mobilePosterSrc = image.getAttribute("src") || image.dataset.mobilePosterSrc || "";
-    if (image.dataset.mobilePosterSrc) mobileCollectionImageObserver.observe(image);
-  });
-}
-
 function renderMobileCollectionWindow(startRow, totalRows) {
   const grid = document.querySelector(".collection-grid");
   if (!grid || !isMobileCardLayout() || state.view !== "collection") return;
@@ -990,10 +957,13 @@ function renderMobileCollectionWindow(startRow, totalRows) {
 
   mobileCollectionWindowStartRow = nextStartRow;
   mobileCollectionWindowEndRow = nextEndRow;
-  grid.innerHTML = collectionGridHtml(mobileCollectionVirtualItems.slice(
-    nextStartRow * MOBILE_COLLECTION_COLUMNS,
-    nextEndRow * MOBILE_COLLECTION_COLUMNS,
-  ));
+  grid.innerHTML = collectionGridHtml(
+    mobileCollectionVirtualItems.slice(
+      nextStartRow * MOBILE_COLLECTION_COLUMNS,
+      nextEndRow * MOBILE_COLLECTION_COLUMNS,
+    ),
+    { miniature: true },
+  );
   applyCollectionGridWindow(grid, {
     totalRows,
     startRow: nextStartRow,
@@ -1233,7 +1203,6 @@ function bindMobileCardExperience({ skipVirtualSetup = false } = {}) {
   const { signal } = cardViewerAbortController;
   const mobile = isMobileCardLayout();
   observeResponsiveCardSizes();
-  observeMobileCollectionImages();
 
   document.querySelectorAll(".mobile-card-tile").forEach((tile) => {
     const card = tile.querySelector(":scope > .mobile-card-scale > .card");
@@ -2051,7 +2020,6 @@ function render() {
   else {
     cardViewerAbortController?.abort();
     mobileCardScaleObserver?.disconnect();
-    mobileCollectionImageObserver?.disconnect();
     mobileCollectionVirtualAbortController?.abort();
   }
 }

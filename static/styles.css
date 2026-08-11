@@ -2709,10 +2709,6 @@ input, select {
     cursor: zoom-in;
   }
 
-  .collection-grid .mobile-card-tile {
-    content-visibility: auto;
-  }
-
   .collection-grid .mobile-card-tile > .mobile-card-scale > .card {
     transform: none;
     transform-style: flat;
@@ -2734,6 +2730,13 @@ input, select {
     height: 500px;
     transform: scale(var(--collection-card-scale));
     transform-origin: top left;
+  }
+
+  @supports (-webkit-touch-callout: none) {
+    .collection-grid .mobile-card-scale {
+      transform: none;
+      zoom: var(--collection-card-scale);
+    }
   }
 
   .mobile-card-scale > .card {

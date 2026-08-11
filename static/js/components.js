@@ -2,7 +2,7 @@ import {
   state,
   DEFAULT_COLLECTION_SORT, RARITIES, RARITY_RANK, SELL_PRICES, SHOWCASE_LIMIT,
   creditTimerText, escapeHtml, formatCredits, statsHtml,
-} from "./state.js?v=cinedex-mobile-7";
+} from "./state.js?v=cinedex-mobile-8";
 
 // ---------------------------------------------------------------------------
 // Posters
@@ -184,12 +184,12 @@ export function collectionCardHtml(item, featured, readonly = false, menuScope =
 
 // Rend une grille de cartes possedees en calculant le slot de vitrine libre UNE seule fois
 // (au lieu d'un calcul O(N) par carte -> O(N^2) sur la collection).
-export function collectionGridHtml(items) {
+export function collectionGridHtml(items, { miniature = false } = {}) {
   const nextSlot = firstEmptyShowcaseSlot();
   return items
     .map((item) => mobileCardTileHtml(item, {
       source: "collection",
-      cardHtml: collectionCardHtml(item, false, false, "collection", nextSlot),
+      cardHtml: collectionCardHtml(item, false, miniature, "collection", nextSlot),
     }))
     .join("");
 }
