@@ -3,7 +3,7 @@ import {
   DEFAULT_COLLECTION_SORT, RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
-} from "./js/state.js?v=cinedex-mobile-9";
+} from "./js/state.js?v=cinedex-mobile-10";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
   cardViewerHtml, collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
@@ -11,7 +11,7 @@ import {
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
   loginForms, nav, notificationsViewHtml, publicCollectionCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
   showcaseItems, walletHtml,
-} from "./js/components.js?v=cinedex-mobile-9";
+} from "./js/components.js?v=cinedex-mobile-10";
 
 const $ = (selector) => document.querySelector(selector);
 

@@ -2,7 +2,7 @@ import {
   state,
   DEFAULT_COLLECTION_SORT, RARITIES, RARITY_RANK, SELL_PRICES, SHOWCASE_LIMIT,
   creditTimerText, escapeHtml, formatCredits, statsHtml,
-} from "./state.js?v=cinedex-mobile-9";
+} from "./state.js?v=cinedex-mobile-10";
 
 // ---------------------------------------------------------------------------
 // Posters

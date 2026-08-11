@@ -2709,7 +2709,7 @@ input, select {
     cursor: zoom-in;
   }
 
-  .collection-grid .mobile-card-tile > .mobile-card-scale > .card {
+  .mobile-card-tile > .mobile-card-scale > .card {
     transform: none;
     transform-style: flat;
     transition: none;
