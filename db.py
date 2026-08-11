@@ -97,6 +97,7 @@ def init_db() -> None:
                 user_id INTEGER NOT NULL,
                 item_id TEXT NOT NULL,
                 count INTEGER NOT NULL DEFAULT 0,
+                obtained_at INTEGER,
                 PRIMARY KEY (user_id, item_id),
                 FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
             );
@@ -165,6 +166,37 @@ def init_db() -> None:
             )
         if "letterboxd_username" not in user_cols:
             conn.execute("ALTER TABLE users ADD COLUMN letterboxd_username TEXT")
+        inventory_cols = {r["name"] for r in conn.execute("PRAGMA table_info(inventory)").fetchall()}
+        if "obtained_at" not in inventory_cols:
+            conn.execute("ALTER TABLE inventory ADD COLUMN obtained_at INTEGER")
+            legacy_inventory = conn.execute(
+                "SELECT user_id, item_id FROM inventory WHERE count > 0"
+            ).fetchall()
+            for row in legacy_inventory:
+                history = conn.execute(
+                    """
+                    SELECT MAX(created_at) AS obtained_at
+                    FROM (
+                        SELECT created_at
+                        FROM rolls
+                        WHERE user_id = ? AND item_id = ? AND opened = 1
+                        UNION ALL
+                        SELECT created_at
+                        FROM trades
+                        WHERE to_user_id = ? AND offer_item_id = ?
+                    )
+                    """,
+                    (row["user_id"], row["item_id"], row["user_id"], row["item_id"]),
+                ).fetchone()
+                if history["obtained_at"] is not None:
+                    conn.execute(
+                        """
+                        UPDATE inventory
+                        SET obtained_at = ?
+                        WHERE user_id = ? AND item_id = ?
+                        """,
+                        (history["obtained_at"], row["user_id"], row["item_id"]),
+                    )
         cs_cols = {r["name"] for r in conn.execute("PRAGMA table_info(collection_state)").fetchall()}
         if "favorite" not in cs_cols:
             conn.execute(

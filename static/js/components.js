@@ -1,8 +1,8 @@
 import {
   state,
-  RARITIES, RARITY_RANK, SELL_PRICES, SHOWCASE_LIMIT,
+  DEFAULT_COLLECTION_SORT, RARITIES, RARITY_RANK, SELL_PRICES, SHOWCASE_LIMIT,
   creditTimerText, escapeHtml, formatCredits, statsHtml,
-} from "./state.js?v=recipient-autocomplete-2";
+} from "./state.js?v=collection-sort-2";
 
 // ---------------------------------------------------------------------------
 // Posters
@@ -347,6 +347,30 @@ export function collectionStatsHtml() {
 // Filtres de collection
 // ---------------------------------------------------------------------------
 
+function standardCollectionSort(a, b) {
+  const rd = (RARITY_RANK[a.rarity] ?? 99) - (RARITY_RANK[b.rarity] ?? 99);
+  if (rd) return rd;
+  const rd2 = Number(b.rating || 0) - Number(a.rating || 0);
+  if (rd2) return rd2;
+  const rd3 = Number(b.reviewCount || 0) - Number(a.reviewCount || 0);
+  if (rd3) return rd3;
+  return a.name.localeCompare(b.name);
+}
+
+function collectionSort(a, b, sort) {
+  if (sort === "obtained-desc" || sort === "obtained-asc") {
+    const aDate = Number(a.obtainedAt);
+    const bDate = Number(b.obtainedAt);
+    const aHasDate = Number.isFinite(aDate) && aDate > 0;
+    const bHasDate = Number.isFinite(bDate) && bDate > 0;
+    if (aHasDate !== bHasDate) return aHasDate ? -1 : 1;
+    if (aHasDate && bHasDate && aDate !== bDate) {
+      return sort === "obtained-desc" ? bDate - aDate : aDate - bDate;
+    }
+  }
+  return standardCollectionSort(a, b);
+}
+
 export function applyCollectionFilters(items, filters) {
   return items
     .filter((item) => {
@@ -361,15 +385,7 @@ export function applyCollectionFilters(items, filters) {
       if (filters.owned === "unseen"    && item.seen)      return false;
       return true;
     })
-    .sort((a, b) => {
-      const rd = (RARITY_RANK[a.rarity] ?? 99) - (RARITY_RANK[b.rarity] ?? 99);
-      if (rd) return rd;
-      const rd2 = Number(b.rating || 0) - Number(a.rating || 0);
-      if (rd2) return rd2;
-      const rd3 = Number(b.reviewCount || 0) - Number(a.reviewCount || 0);
-      if (rd3) return rd3;
-      return a.name.localeCompare(b.name);
-    });
+    .sort((a, b) => collectionSort(a, b, filters.sort || "standard"));
 }
 
 export function filteredCollection() {
@@ -382,7 +398,10 @@ export function filteredPublicCollection() {
 }
 
 export function hasActiveFilters() {
-  return state.filters.q !== "" || state.filters.rarity !== "all" || state.filters.owned !== "all";
+  return state.filters.q !== ""
+    || state.filters.rarity !== "all"
+    || state.filters.owned !== "all"
+    || state.filters.sort !== DEFAULT_COLLECTION_SORT;
 }
 
 export function filterCountText(count) {

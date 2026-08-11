@@ -90,6 +90,7 @@ class NotificationIntegrationTests(unittest.TestCase):
 
         item_id = next(iter(game.ITEMS))
         with sqlite3.connect(migration_db) as conn:
+            conn.execute("ALTER TABLE inventory DROP COLUMN obtained_at")
             conn.execute("DROP TABLE notifications")
             conn.execute("ALTER TABLE users DROP COLUMN letterboxd_username")
             conn.executemany(
@@ -101,10 +102,29 @@ class NotificationIntegrationTests(unittest.TestCase):
                 [("legacy-sender",), ("legacy-receiver",)],
             )
             conn.execute(
+                "INSERT INTO inventory (user_id, item_id, count) VALUES (1, ?, 1)",
+                (item_id,),
+            )
+            conn.execute(
+                """
+                INSERT INTO rolls (id, user_id, item_id, opened, created_at)
+                VALUES ('legacy-roll', 1, ?, 1, 100)
+                """,
+                (item_id,),
+            )
+            conn.execute(
                 """
                 INSERT INTO trades
                     (id, from_user_id, to_user_id, offer_item_id, request_item_id, status, created_at)
                 VALUES ('legacy-trade', 1, 2, ?, ?, 'sent', 1)
+                """,
+                (item_id, item_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO trades
+                    (id, from_user_id, to_user_id, offer_item_id, request_item_id, status, created_at)
+                VALUES ('legacy-received-trade', 2, 1, ?, ?, 'sent', 200)
                 """,
                 (item_id, item_id),
             )
@@ -120,11 +140,87 @@ class NotificationIntegrationTests(unittest.TestCase):
             legacy_trade = conn.execute(
                 "SELECT COUNT(*) FROM trades WHERE id = 'legacy-trade'"
             ).fetchone()[0]
+            obtained_at = conn.execute(
+                "SELECT obtained_at FROM inventory WHERE user_id = 1 AND item_id = ?",
+                (item_id,),
+            ).fetchone()[0]
         self.assertTrue({"type", "source_id", "payload_json", "read_at"}.issubset(columns))
         self.assertIn("letterboxd_username", user_columns)
         self.assertEqual(letterboxd_values, [(None,), (None,)])
         self.assertEqual(count, 0)
         self.assertEqual(legacy_trade, 1)
+        self.assertEqual(obtained_at, 200)
+
+    def test_latest_obtained_at_updates_on_acquisition_and_is_private(self) -> None:
+        owner = self.create_user("acquisition-owner")
+        receiver = self.create_user("acquisition-receiver")
+        item_id = next(iter(game.ITEMS))
+
+        with db() as conn:
+            owner_id = conn.execute(
+                "SELECT id FROM users WHERE username = ?", (owner["username"],)
+            ).fetchone()["id"]
+            receiver_id = conn.execute(
+                "SELECT id FROM users WHERE username = ?", (receiver["username"],)
+            ).fetchone()["id"]
+            game.add_item(conn, owner_id, item_id, 1, obtained_at=100)
+            game.add_item(conn, owner_id, item_id, 1, obtained_at=200)
+            game.add_item(conn, owner_id, item_id, -1)
+            owner_row = conn.execute(
+                "SELECT count, obtained_at FROM inventory WHERE user_id = ? AND item_id = ?",
+                (owner_id, item_id),
+            ).fetchone()
+            self.assertEqual((owner_row["count"], owner_row["obtained_at"]), (1, 200))
+
+            game.add_item(conn, owner_id, item_id, -1)
+            game.add_item(conn, owner_id, item_id, 1, obtained_at=300)
+            reset_row = conn.execute(
+                "SELECT count, obtained_at FROM inventory WHERE user_id = ? AND item_id = ?",
+                (owner_id, item_id),
+            ).fetchone()
+            self.assertEqual((reset_row["count"], reset_row["obtained_at"]), (1, 300))
+            game.add_item(conn, owner_id, item_id, 1, obtained_at=400)
+
+        status, sent = self.request(
+            "/api/trades",
+            auth=owner,
+            body={"toUsername": receiver["username"], "offerItemId": item_id},
+        )
+        self.assertEqual(status, 201)
+        trade_created_at = sent["trade"]["createdAt"]
+
+        with db() as conn:
+            owner_id = conn.execute(
+                "SELECT id FROM users WHERE username = ?", (owner["username"],)
+            ).fetchone()["id"]
+            receiver_id = conn.execute(
+                "SELECT id FROM users WHERE username = ?", (receiver["username"],)
+            ).fetchone()["id"]
+            owner_row = conn.execute(
+                "SELECT count, obtained_at FROM inventory WHERE user_id = ? AND item_id = ?",
+                (owner_id, item_id),
+            ).fetchone()
+            receiver_row = conn.execute(
+                "SELECT count, obtained_at FROM inventory WHERE user_id = ? AND item_id = ?",
+                (receiver_id, item_id),
+            ).fetchone()
+            self.assertEqual((owner_row["count"], owner_row["obtained_at"]), (1, 400))
+            self.assertEqual(
+                (receiver_row["count"], receiver_row["obtained_at"]),
+                (1, trade_created_at),
+            )
+
+        status, private_collection = self.request("/api/collection", auth=receiver)
+        self.assertEqual(status, 200)
+        private_item = next(item for item in private_collection["items"] if item["id"] == item_id)
+        self.assertEqual(private_item["obtainedAt"], trade_created_at)
+
+        status, public_collection = self.request(
+            f"/api/users/{receiver['username']}/collection", auth=owner
+        )
+        self.assertEqual(status, 200)
+        public_item = next(item for item in public_collection["items"] if item["id"] == item_id)
+        self.assertNotIn("obtainedAt", public_item)
 
     def test_letterboxd_profile_lifecycle_validation_and_isolation(self) -> None:
         first_user = self.create_user("letterboxd-owner")

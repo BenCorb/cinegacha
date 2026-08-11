@@ -1,7 +1,13 @@
 {
-  "version": "1.5",
+  "version": "1.6",
   "license": "GPL-3.0-or-later",
   "changelog": [
+    {
+      "version": "1.6",
+      "changes": [
+        "Ajout du tri de la collection par date d'obtention"
+      ]
+    },
     {
       "version": "1.5",
       "changes": [

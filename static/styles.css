@@ -1302,6 +1302,10 @@ input, select {
   margin-bottom: 8px;
 }
 
+.collection-filters {
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
 .filter-meta {
   display: flex;
   align-items: center;

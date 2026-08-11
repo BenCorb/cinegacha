@@ -356,7 +356,9 @@ class Handler(SimpleHTTPRequestHandler):
                 if parsed.path == "/api/collection":
                     summary = collection_summary(conn, user["id"])
                     self.send_json({
-                        "items": owned_collection_for(conn, user["id"]),
+                        "items": owned_collection_for(
+                            conn, user["id"], include_obtained_at=True
+                        ),
                         "summary": summary,
                         "owned": summary["owned"],
                         "total": summary["total"],
@@ -556,10 +558,17 @@ class Handler(SimpleHTTPRequestHandler):
                     rolls = [rows_by_id[roll_id] for roll_id in roll_ids]
                     if any(roll["opened"] for roll in rolls):
                         raise ApiError(HTTPStatus.CONFLICT, "Cette capsule est deja ouverte.")
+                    obtained_at = now()
                     results = []
                     for roll in rolls:
                         before = inventory_count(conn, user["id"], roll["item_id"])
-                        add_item(conn, user["id"], roll["item_id"], 1)
+                        add_item(
+                            conn,
+                            user["id"],
+                            roll["item_id"],
+                            1,
+                            obtained_at=obtained_at,
+                        )
                         results.append({
                             "item": item_payload(roll["item_id"], before + 1),
                             "isDuplicate": before > 0,
@@ -786,7 +795,13 @@ class Handler(SimpleHTTPRequestHandler):
                     trade_id = secrets.token_urlsafe(10)
                     created_at = now()
                     add_item(conn, user["id"], offer_item_id, -1)
-                    add_item(conn, to_user["id"], offer_item_id, 1)
+                    add_item(
+                        conn,
+                        to_user["id"],
+                        offer_item_id,
+                        1,
+                        obtained_at=created_at,
+                    )
                     conn.execute(
                         """
                         INSERT INTO trades (id, from_user_id, to_user_id, offer_item_id, request_item_id, status, created_at)

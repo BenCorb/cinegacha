@@ -143,14 +143,25 @@ def inventory_count(conn: sqlite3.Connection, user_id: int, item_id: str) -> int
     return int(row["count"]) if row else 0
 
 
-def add_item(conn: sqlite3.Connection, user_id: int, item_id: str, delta: int) -> None:
+def add_item(
+    conn: sqlite3.Connection,
+    user_id: int,
+    item_id: str,
+    delta: int,
+    *,
+    obtained_at: int | None = None,
+) -> None:
     if delta > 0:
+        acquired_at = now() if obtained_at is None else int(obtained_at)
         conn.execute(
             """
-            INSERT INTO inventory (user_id, item_id, count) VALUES (?, ?, ?)
-            ON CONFLICT(user_id, item_id) DO UPDATE SET count = count + excluded.count
+            INSERT INTO inventory (user_id, item_id, count, obtained_at)
+            VALUES (?, ?, ?, ?)
+            ON CONFLICT(user_id, item_id) DO UPDATE SET
+                count = count + excluded.count,
+                obtained_at = excluded.obtained_at
             """,
-            (user_id, item_id, delta),
+            (user_id, item_id, delta, acquired_at),
         )
     else:
         rows = conn.execute(
@@ -286,17 +297,28 @@ def collection_for(conn: sqlite3.Connection, user_id: int) -> list[dict]:
     return payload
 
 
-def owned_collection_for(conn: sqlite3.Connection, user_id: int) -> list[dict]:
+def owned_collection_for(
+    conn: sqlite3.Connection,
+    user_id: int,
+    *,
+    include_obtained_at: bool = False,
+) -> list[dict]:
     """Cartes possedees uniquement (count > 0), avec l'etat par utilisateur.
 
     Ne revele aucun film non debloque (voir collection_for pour la version complete
-    avec items caches). Payload proportionnel a la collection du joueur.
+    avec items caches). Payload proportionnel a la collection du joueur. La date
+    d'obtention est incluse uniquement pour la collection privee.
     """
     rows = conn.execute(
-        "SELECT item_id, count FROM inventory WHERE user_id = ? AND count > 0", (user_id,)
+        """
+        SELECT item_id, count, obtained_at
+        FROM inventory
+        WHERE user_id = ? AND count > 0
+        """,
+        (user_id,),
     ).fetchall()
-    counts = {row["item_id"]: row["count"] for row in rows}
-    if not counts:
+    inventory_by_id = {row["item_id"]: row for row in rows}
+    if not inventory_by_id:
         return []
 
     state_rows = conn.execute(
@@ -307,10 +329,17 @@ def owned_collection_for(conn: sqlite3.Connection, user_id: int) -> list[dict]:
 
     payload = []
     for item in DATASET["items"]:
-        count = counts.get(item["id"], 0)
+        inventory_row = inventory_by_id.get(item["id"])
+        count = int(inventory_row["count"]) if inventory_row else 0
         if count <= 0:
             continue
         entry = item_payload(item["id"], count)
+        if include_obtained_at:
+            entry["obtainedAt"] = (
+                int(inventory_row["obtained_at"])
+                if inventory_row["obtained_at"] is not None
+                else None
+            )
         cs = cstate.get(item["id"])
         favorite = bool(cs["favorite"]) if cs else False
         entry["seen"] = bool(cs["seen"]) if cs else False

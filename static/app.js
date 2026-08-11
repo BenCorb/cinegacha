@@ -1,9 +1,9 @@
 import {
   state,
-  RARITIES, ROLL_COST,
+  DEFAULT_COLLECTION_SORT, RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
-} from "./js/state.js?v=recipient-autocomplete-2";
+} from "./js/state.js?v=collection-sort-2";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
   collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
@@ -11,7 +11,7 @@ import {
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
   loginForms, nav, notificationsViewHtml, publicCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
   walletHtml,
-} from "./js/components.js?v=recipient-autocomplete-2";
+} from "./js/components.js?v=collection-sort-2";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -713,7 +713,7 @@ function renderCollection() {
     <section class="panel">
       ${collectionStatsHtml()}
       ${showcaseEditorHtml()}
-      <div class="filters">
+      <div class="filters collection-filters">
         <input id="q" placeholder="Rechercher un film" value="${escapeHtml(state.filters.q)}">
         <select id="rarity">
           ${["all", ...RARITIES].map((r) =>
@@ -728,6 +728,11 @@ function renderCollection() {
           <option value="seen"      ${state.filters.owned === "seen"      ? "selected" : ""}>Vus</option>
           <option value="unseen"    ${state.filters.owned === "unseen"    ? "selected" : ""}>Non vus</option>
         </select>
+        <select id="sort" aria-label="Trier la collection">
+          <option value="standard"      ${state.filters.sort === "standard"      ? "selected" : ""}>Tri standard</option>
+          <option value="obtained-desc" ${state.filters.sort === "obtained-desc" ? "selected" : ""}>Obtention : récent → ancien</option>
+          <option value="obtained-asc"  ${state.filters.sort === "obtained-asc"  ? "selected" : ""}>Obtention : ancien → récent</option>
+        </select>
       </div>
       <div class="filter-meta">
         <span class="filter-count">${filterCountText(items.length)}</span>
@@ -736,14 +741,14 @@ function renderCollection() {
       <div class="grid collection-grid">${items.length ? collectionGridHtml(items) : collectionEmptyHtml()}</div>
     </section>
   `);
-  ["q", "rarity", "owned"].forEach((id) => {
+  ["q", "rarity", "owned", "sort"].forEach((id) => {
     $("#" + id).addEventListener("input", (event) => {
-      state.filters[id === "q" ? "q" : id] = event.target.value;
+      state.filters[id] = event.target.value;
       renderCollectionGrid();
     });
   });
   $("#resetFilters")?.addEventListener("click", () => {
-    state.filters = { q: "", rarity: "all", owned: "all" };
+    state.filters = { q: "", rarity: "all", owned: "all", sort: DEFAULT_COLLECTION_SORT };
     render();
   });
 }
@@ -1126,7 +1131,13 @@ async function setShowcaseSlot(itemId, slot) {
       body: JSON.stringify({ itemId, slot }),
     });
     if (Array.isArray(updated.items)) {
-      state.collection = updated.items;
+      const previousItems = new Map(state.collection.map((item) => [item.id, item]));
+      state.collection = updated.items.map((item) => {
+        const previous = previousItems.get(item.id);
+        return previous && Object.prototype.hasOwnProperty.call(previous, "obtainedAt")
+          ? { ...item, obtainedAt: previous.obtainedAt }
+          : item;
+      });
       syncResultItems(state.collection);
     }
     if (typeof updated.credits === "number") mergeUser(updated);
