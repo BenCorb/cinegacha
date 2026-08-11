@@ -2732,13 +2732,6 @@ input, select {
     transform-origin: top left;
   }
 
-  @supports (-webkit-touch-callout: none) {
-    .collection-grid .mobile-card-scale {
-      transform: none;
-      zoom: var(--collection-card-scale);
-    }
-  }
-
   .mobile-card-scale > .card {
     width: 300px;
     max-width: none;
