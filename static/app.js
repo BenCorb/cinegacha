@@ -3,7 +3,7 @@ import {
   DEFAULT_COLLECTION_SORT, RARITIES, ROLL_COST,
   api, mergeUser, preloadImage, saveUser,
   creditTimerText, escapeHtml, loadRelease, serverNowMs,
-} from "./js/state.js?v=cinedex-mobile-6";
+} from "./js/state.js?v=cinedex-mobile-7";
 import {
   accountPanelHtml, achievementsViewHtml, applyCollectionFilters, burstHtml,
   cardViewerHtml, collectionEmptyHtml, collectionGridHtml, collectionStatsHtml,
@@ -11,7 +11,7 @@ import {
   filteredPublicCollection, hasActiveFilters, keyModalHtml, leaderboardRowHtml,
   loginForms, nav, notificationsViewHtml, publicCollectionCardHtml, publicCollectionHtml, resultHtml, showcaseEditorHtml,
   showcaseItems, walletHtml,
-} from "./js/components.js?v=cinedex-mobile-6";
+} from "./js/components.js?v=cinedex-mobile-7";
 
 const $ = (selector) => document.querySelector(selector);
 
@@ -38,10 +38,20 @@ const COLLECTION_SWIPE_LOCK_DISTANCE = 12;
 const COLLECTION_SWIPE_RATIO = 0.24;
 const COLLECTION_SWIPE_MAX_DISTANCE = 84;
 const COLLECTION_SWIPE_MIN_VELOCITY = 0.5;
+const MOBILE_COLLECTION_COLUMNS = 3;
+const MOBILE_COLLECTION_WINDOW_ROWS = 36;
+const MOBILE_COLLECTION_OVERSCAN_ROWS = 10;
 
 const MOBILE_CARD_QUERY = window.matchMedia("(max-width: 700px)");
 let mobileCardScaleObserver = null;
 let mobileCollectionImageObserver = null;
+let mobileCollectionVirtualAbortController = null;
+let mobileCollectionVirtualFrame = 0;
+let mobileCollectionVirtualItems = [];
+let mobileCollectionWindowStartRow = 0;
+let mobileCollectionWindowEndRow = 0;
+let mobileCollectionRowStride = 0;
+let mobileCollectionWindowSignature = "";
 let cardViewerAbortController = null;
 let cardViewerReturnTarget = null;
 let cardViewerScrollY = 0;
@@ -720,9 +730,63 @@ function closeResult() {
 // Vue Collection
 // ---------------------------------------------------------------------------
 
+function collectionWindowSignature(items) {
+  const firstId = items[0]?.id || "";
+  const lastId = items[items.length - 1]?.id || "";
+  return `${state.filters.q}\u0000${state.filters.rarity}\u0000${state.filters.owned}\u0000${state.filters.sort}\u0000${items.length}\u0000${firstId}\u0000${lastId}`;
+}
+
+function collectionGridWindow(items) {
+  mobileCollectionVirtualItems = items;
+  const totalRows = Math.ceil(items.length / MOBILE_COLLECTION_COLUMNS);
+  if (!isMobileCardLayout()) {
+    mobileCollectionWindowStartRow = 0;
+    mobileCollectionWindowEndRow = totalRows;
+    return { items, totalRows, startRow: 0, endRow: totalRows };
+  }
+
+  const signature = collectionWindowSignature(items);
+  if (signature !== mobileCollectionWindowSignature) {
+    mobileCollectionWindowSignature = signature;
+    mobileCollectionWindowStartRow = 0;
+  }
+  const maxStartRow = Math.max(0, totalRows - MOBILE_COLLECTION_WINDOW_ROWS);
+  mobileCollectionWindowStartRow = Math.min(mobileCollectionWindowStartRow, maxStartRow);
+  mobileCollectionWindowEndRow = Math.min(
+    totalRows,
+    mobileCollectionWindowStartRow + MOBILE_COLLECTION_WINDOW_ROWS,
+  );
+  return {
+    items: items.slice(
+      mobileCollectionWindowStartRow * MOBILE_COLLECTION_COLUMNS,
+      mobileCollectionWindowEndRow * MOBILE_COLLECTION_COLUMNS,
+    ),
+    totalRows,
+    startRow: mobileCollectionWindowStartRow,
+    endRow: mobileCollectionWindowEndRow,
+  };
+}
+
+function applyCollectionGridWindow(grid, windowData) {
+  if (!grid) return;
+  grid.dataset.collectionTotalRows = String(windowData.totalRows);
+  grid.dataset.collectionStartRow = String(windowData.startRow);
+  grid.dataset.collectionEndRow = String(windowData.endRow);
+  if (!isMobileCardLayout() || !windowData.totalRows) {
+    grid.style.removeProperty("padding-block-start");
+    grid.style.removeProperty("padding-block-end");
+    return;
+  }
+  const before = windowData.startRow * mobileCollectionRowStride;
+  const after = (windowData.totalRows - windowData.endRow) * mobileCollectionRowStride;
+  grid.style.paddingBlockStart = `${before.toFixed(2)}px`;
+  grid.style.paddingBlockEnd = `${after.toFixed(2)}px`;
+}
+
 function renderCollection() {
   if (requireLogin()) return;
   const items = filteredCollection();
+  const gridWindow = collectionGridWindow(items);
   const active = hasActiveFilters();
   renderShell(`
     <section class="panel">
@@ -753,10 +817,11 @@ function renderCollection() {
         <span class="filter-count">${filterCountText(items.length)}</span>
         <button class="ghost filter-reset ${active ? "is-active" : ""}" id="resetFilters" type="button">Effacer les filtres</button>
       </div>
-      <div class="grid collection-grid">${items.length ? collectionGridHtml(items) : collectionEmptyHtml()}</div>
+      <div class="grid collection-grid">${items.length ? collectionGridHtml(gridWindow.items) : collectionEmptyHtml()}</div>
     </section>
     ${cardViewerMarkup()}
   `);
+  applyCollectionGridWindow(document.querySelector(".collection-grid"), gridWindow);
   ["q", "rarity", "owned", "sort"].forEach((id) => {
     $("#" + id).addEventListener("input", (event) => {
       state.filters[id] = event.target.value;
@@ -775,7 +840,9 @@ function renderCollectionGrid() {
   state.activeCardMenu = null;
   state.cardMenuMode = null;
   const items = filteredCollection();
-  grid.innerHTML = items.length ? collectionGridHtml(items) : collectionEmptyHtml();
+  const gridWindow = collectionGridWindow(items);
+  grid.innerHTML = items.length ? collectionGridHtml(gridWindow.items) : collectionEmptyHtml();
+  applyCollectionGridWindow(grid, gridWindow);
   const countEl = document.querySelector(".filter-count");
   if (countEl) countEl.textContent = filterCountText(items.length);
   const active = hasActiveFilters();
@@ -901,6 +968,96 @@ function observeMobileCollectionImages() {
     image.dataset.mobilePosterSrc = image.getAttribute("src") || image.dataset.mobilePosterSrc || "";
     if (image.dataset.mobilePosterSrc) mobileCollectionImageObserver.observe(image);
   });
+}
+
+function renderMobileCollectionWindow(startRow, totalRows) {
+  const grid = document.querySelector(".collection-grid");
+  if (!grid || !isMobileCardLayout() || state.view !== "collection") return;
+  const maxStartRow = Math.max(0, totalRows - MOBILE_COLLECTION_WINDOW_ROWS);
+  const nextStartRow = Math.max(0, Math.min(startRow, maxStartRow));
+  const nextEndRow = Math.min(totalRows, nextStartRow + MOBILE_COLLECTION_WINDOW_ROWS);
+  if (
+    nextStartRow === mobileCollectionWindowStartRow
+    && nextEndRow === mobileCollectionWindowEndRow
+  ) {
+    applyCollectionGridWindow(grid, {
+      totalRows,
+      startRow: nextStartRow,
+      endRow: nextEndRow,
+    });
+    return;
+  }
+
+  mobileCollectionWindowStartRow = nextStartRow;
+  mobileCollectionWindowEndRow = nextEndRow;
+  grid.innerHTML = collectionGridHtml(mobileCollectionVirtualItems.slice(
+    nextStartRow * MOBILE_COLLECTION_COLUMNS,
+    nextEndRow * MOBILE_COLLECTION_COLUMNS,
+  ));
+  applyCollectionGridWindow(grid, {
+    totalRows,
+    startRow: nextStartRow,
+    endRow: nextEndRow,
+  });
+  scaleResponsiveCards();
+  bindInteractiveCards(grid);
+  bindMobileCardExperience({ skipVirtualSetup: true });
+}
+
+function updateMobileCollectionVirtualWindow({ force = false } = {}) {
+  mobileCollectionVirtualFrame = 0;
+  const grid = document.querySelector(".collection-grid");
+  if (!grid || !isMobileCardLayout() || state.view !== "collection") return;
+  const tile = grid.querySelector(".mobile-card-tile");
+  const totalRows = Math.ceil(mobileCollectionVirtualItems.length / MOBILE_COLLECTION_COLUMNS);
+  if (!tile || !totalRows) return;
+
+  const styles = getComputedStyle(grid);
+  const rowGap = Number.parseFloat(styles.rowGap) || 0;
+  const tileHeight = tile.getBoundingClientRect().height;
+  if (tileHeight <= 0) return;
+  mobileCollectionRowStride = tileHeight + rowGap;
+  applyCollectionGridWindow(grid, {
+    totalRows,
+    startRow: mobileCollectionWindowStartRow,
+    endRow: mobileCollectionWindowEndRow,
+  });
+  if (state.cardViewer) return;
+
+  const gridTop = grid.getBoundingClientRect().top + window.scrollY;
+  const viewportStart = Math.max(0, window.scrollY - gridTop);
+  const viewportEnd = Math.max(0, window.scrollY + window.innerHeight - gridTop);
+  const visibleStartRow = Math.floor(viewportStart / mobileCollectionRowStride);
+  const visibleEndRow = Math.ceil(viewportEnd / mobileCollectionRowStride);
+  const guardRows = Math.max(3, Math.floor(MOBILE_COLLECTION_OVERSCAN_ROWS / 2));
+  const needsEarlierRows = mobileCollectionWindowStartRow > 0
+    && visibleStartRow < mobileCollectionWindowStartRow + guardRows;
+  const needsLaterRows = mobileCollectionWindowEndRow < totalRows
+    && visibleEndRow > mobileCollectionWindowEndRow - guardRows;
+  if (!force && !needsEarlierRows && !needsLaterRows) return;
+
+  renderMobileCollectionWindow(visibleStartRow - MOBILE_COLLECTION_OVERSCAN_ROWS, totalRows);
+}
+
+function scheduleMobileCollectionVirtualWindow() {
+  if (mobileCollectionVirtualFrame) return;
+  mobileCollectionVirtualFrame = requestAnimationFrame(() => {
+    updateMobileCollectionVirtualWindow();
+  });
+}
+
+function setupMobileCollectionVirtualization() {
+  mobileCollectionVirtualAbortController?.abort();
+  mobileCollectionVirtualAbortController = null;
+  if (mobileCollectionVirtualFrame) cancelAnimationFrame(mobileCollectionVirtualFrame);
+  mobileCollectionVirtualFrame = 0;
+  if (!isMobileCardLayout() || state.view !== "collection") return;
+
+  updateMobileCollectionVirtualWindow({ force: true });
+  mobileCollectionVirtualAbortController = new AbortController();
+  const { signal } = mobileCollectionVirtualAbortController;
+  window.addEventListener("scroll", scheduleMobileCollectionVirtualWindow, { passive: true, signal });
+  window.addEventListener("resize", scheduleMobileCollectionVirtualWindow, { passive: true, signal });
 }
 
 function openCardViewer(itemId, source) {
@@ -1070,7 +1227,7 @@ function bindCardViewerSwipe(stage, signal) {
   }, { capture: true, signal });
 }
 
-function bindMobileCardExperience() {
+function bindMobileCardExperience({ skipVirtualSetup = false } = {}) {
   cardViewerAbortController?.abort();
   cardViewerAbortController = new AbortController();
   const { signal } = cardViewerAbortController;
@@ -1106,43 +1263,45 @@ function bindMobileCardExperience() {
 
   const backdrop = document.querySelector("[data-collection-viewer-backdrop]");
   const stage = document.querySelector("[data-collection-viewer-stage]");
-  if (!backdrop || !stage) return;
-  backdrop.addEventListener("click", (event) => {
-    if (event.target === backdrop) closeCardViewer();
-  }, { signal });
-  document.querySelector("[data-collection-viewer-close]")?.addEventListener("click", closeCardViewer, { signal });
-  document.querySelectorAll("[data-collection-viewer-step]").forEach((button) => {
-    button.addEventListener("click", () => stepCardViewer(Number(button.dataset.collectionViewerStep)), { signal });
-  });
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape") {
-      event.preventDefault();
-      closeCardViewer();
-      return;
-    }
-    if (event.key === "Tab") {
-      const viewer = document.querySelector(".collection-viewer");
-      const focusable = [...viewer.querySelectorAll(
-        "button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled)",
-      )].filter((element) => element.getClientRects().length > 0);
-      if (!focusable.length) return;
-      const currentIndex = focusable.indexOf(document.activeElement);
-      const nextIndex = event.shiftKey
-        ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
-        : (currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
-      if (currentIndex < 0 || (event.shiftKey && currentIndex === 0) || (!event.shiftKey && currentIndex === focusable.length - 1)) {
+  if (backdrop && stage) {
+    backdrop.addEventListener("click", (event) => {
+      if (event.target === backdrop) closeCardViewer();
+    }, { signal });
+    document.querySelector("[data-collection-viewer-close]")?.addEventListener("click", closeCardViewer, { signal });
+    document.querySelectorAll("[data-collection-viewer-step]").forEach((button) => {
+      button.addEventListener("click", () => stepCardViewer(Number(button.dataset.collectionViewerStep)), { signal });
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape") {
         event.preventDefault();
-        focusable[nextIndex].focus();
+        closeCardViewer();
+        return;
       }
-      return;
-    }
-    if (event.target.closest("input, select, textarea, [contenteditable='true']")) return;
-    if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
-      event.preventDefault();
-      stepCardViewer(event.key === "ArrowLeft" ? -1 : 1);
-    }
-  }, { signal });
-  bindCardViewerSwipe(stage, signal);
+      if (event.key === "Tab") {
+        const viewer = document.querySelector(".collection-viewer");
+        const focusable = [...viewer.querySelectorAll(
+          "button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled)",
+        )].filter((element) => element.getClientRects().length > 0);
+        if (!focusable.length) return;
+        const currentIndex = focusable.indexOf(document.activeElement);
+        const nextIndex = event.shiftKey
+          ? (currentIndex <= 0 ? focusable.length - 1 : currentIndex - 1)
+          : (currentIndex === focusable.length - 1 ? 0 : currentIndex + 1);
+        if (currentIndex < 0 || (event.shiftKey && currentIndex === 0) || (!event.shiftKey && currentIndex === focusable.length - 1)) {
+          event.preventDefault();
+          focusable[nextIndex].focus();
+        }
+        return;
+      }
+      if (event.target.closest("input, select, textarea, [contenteditable='true']")) return;
+      if (event.key === "ArrowLeft" || event.key === "ArrowRight") {
+        event.preventDefault();
+        stepCardViewer(event.key === "ArrowLeft" ? -1 : 1);
+      }
+    }, { signal });
+    bindCardViewerSwipe(stage, signal);
+  }
+  if (!skipVirtualSetup) setupMobileCollectionVirtualization();
 }
 
 // ---------------------------------------------------------------------------
@@ -1610,9 +1769,9 @@ async function copyConnectionKey(key) {
 // Interactions cartes (poster menu, tilt)
 // ---------------------------------------------------------------------------
 
-function bindCardTilt() {
+function bindCardTilt(root = document) {
   if (!window.matchMedia("(hover: hover) and (pointer: fine)").matches) return;
-  document.querySelectorAll(".card").forEach((card) => {
+  root.querySelectorAll(".card").forEach((card) => {
     let frame = 0, targetX = 0, targetY = 0;
     // will-change uniquement pendant l'interaction : pas de couche de composition permanente.
     card.addEventListener("pointerenter", () => { card.style.willChange = "transform"; });
@@ -1785,25 +1944,25 @@ function bindRecipientCombobox(form, formIndex) {
   resetRecipientCombobox(form);
 }
 
-function bindInteractiveCards() {
-  document.querySelectorAll("[data-seen-id]").forEach((button) =>
+function bindInteractiveCards(root = document) {
+  root.querySelectorAll("[data-seen-id]").forEach((button) =>
     button.addEventListener("click", toggleSeen));
-  document.querySelectorAll("[data-favorite-id]").forEach((button) =>
+  root.querySelectorAll("[data-favorite-id]").forEach((button) =>
     button.addEventListener("click", toggleFavorite));
-  document.querySelectorAll("[data-watchlist-id]").forEach((button) =>
+  root.querySelectorAll("[data-watchlist-id]").forEach((button) =>
     button.addEventListener("click", toggleWatchlist));
-  document.querySelectorAll("[data-showcase-id]").forEach((button) => {
+  root.querySelectorAll("[data-showcase-id]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       const rawSlot = button.dataset.showcaseSlot;
       setShowcaseSlot(button.dataset.showcaseId, rawSlot ? Number(rawSlot) : null);
     });
   });
-  document.querySelectorAll("[data-showcase-move]").forEach((button) => {
+  root.querySelectorAll("[data-showcase-move]").forEach((button) => {
     button.addEventListener("click", () =>
       setShowcaseSlot(button.dataset.showcaseMove, Number(button.dataset.showcaseSlot)));
   });
-  document.querySelectorAll("[data-poster-menu]").forEach((button) => {
+  root.querySelectorAll("[data-poster-menu]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       const menuKey = button.dataset.posterMenu;
@@ -1813,13 +1972,13 @@ function bindInteractiveCards() {
       setPosterMenu(menuKey, !wasOpen);
     });
   });
-  document.querySelectorAll("[data-sell-id]").forEach((button) => {
+  root.querySelectorAll("[data-sell-id]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       sellCard(button.dataset.sellId);
     });
   });
-  document.querySelectorAll("[data-send-toggle]").forEach((button) => {
+  root.querySelectorAll("[data-send-toggle]").forEach((button) => {
     button.addEventListener("click", (event) => {
       event.stopPropagation();
       const menuKey = button.dataset.sendToggle;
@@ -1829,12 +1988,12 @@ function bindInteractiveCards() {
       setPosterMenu(menuKey, true, shouldOpen);
     });
   });
-  document.querySelectorAll("[data-send-form]").forEach((form, formIndex) => {
+  root.querySelectorAll("[data-send-form]").forEach((form, formIndex) => {
     bindRecipientCombobox(form, formIndex);
     form.addEventListener("submit", sendCard);
     form.addEventListener("click", (event) => event.stopPropagation());
   });
-  bindCardTilt();
+  bindCardTilt(root);
 }
 
 // ---------------------------------------------------------------------------
@@ -1893,6 +2052,7 @@ function render() {
     cardViewerAbortController?.abort();
     mobileCardScaleObserver?.disconnect();
     mobileCollectionImageObserver?.disconnect();
+    mobileCollectionVirtualAbortController?.abort();
   }
 }
 
@@ -1914,11 +2074,18 @@ window.addEventListener("resize", () => {
 });
 
 MOBILE_CARD_QUERY.addEventListener("change", () => {
+  mobileCollectionWindowStartRow = 0;
+  mobileCollectionWindowEndRow = 0;
+  mobileCollectionRowStride = 0;
   if (!isMobileCardLayout() && state.cardViewer) {
     closeCardViewer();
     return;
   }
-  if (state.view === "collection" || state.view === "leaderboard") bindMobileCardExperience();
+  if (state.view === "collection") {
+    render();
+    return;
+  }
+  if (state.view === "leaderboard") bindMobileCardExperience();
 });
 
 loadRelease().finally(() => refresh());

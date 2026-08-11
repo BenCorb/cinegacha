@@ -2690,6 +2690,7 @@ input, select {
     grid-template-columns: repeat(3, minmax(0, 1fr));
     justify-content: stretch;
     gap: 6px;
+    overflow-anchor: none;
   }
 
   .public-grid {
